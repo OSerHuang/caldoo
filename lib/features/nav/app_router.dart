@@ -213,9 +213,8 @@ GoRoute _captureRoute() {
             CaptureSubmission submission,
           ) {
             final DateTime now = clock.now();
-            final LocalOffset offset = ProviderScope.containerOf(
-              captureContext,
-            ).read(localOffsetProvider);
+            final LocalOffset offset = ProviderScope.containerOf(captureContext)
+                .read(localOffsetProvider);
             // Backfill: stamp the meal at **noon of the target day under the
             // app's own offset** — the same offset every day window resolves
             // with — so the instant is provably inside that day's window for
