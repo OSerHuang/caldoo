@@ -61,6 +61,8 @@ import 'package:caldoo/domain/services/label_linking.dart'
     show LabelApplyAction, LabelApplyDecision, decideLabelApply;
 import 'package:caldoo/features/meals/capture/image_codec.dart'
     show PreparedPhoto;
+import 'package:caldoo/features/meals/summary/meal_summary_card.dart'
+    show mealTypeLabel;
 import 'package:caldoo/features/meals/saved_foods/saved_food_picker.dart';
 import 'package:caldoo/features/offline/offline_ui.dart';
 import 'package:caldoo/l10n/app_format.dart';
@@ -115,6 +117,12 @@ const Key reviewAddItemButtonKey = Key('review_add_item_button');
 
 /// Key of the save button.
 const Key reviewSaveButtonKey = Key('review_save_button');
+
+/// Key of the meal-type selector (早餐/午餐/晚餐/加餐).
+///
+/// The segments carry no keys ([ButtonSegment] has none); tests tap them by
+/// their `mealTypeLabel` text within this subtree.
+const Key reviewMealTypeSelectorKey = Key('review_meal_type_selector');
 
 /// Key of the live meal-total energy value.
 const Key reviewTotalKcalKey = Key('review_total_kcal');
@@ -180,6 +188,14 @@ class MealReviewScreen extends ConsumerStatefulWidget {
 
 class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
   late MealReviewDraft _draft;
+
+  /// The meal type saved with the record.
+  ///
+  /// Seeded from the route's owning [Meal] (the capture route's hour-based
+  /// guess, or the stored value on an edit) and changed through the selector:
+  /// a backfilled meal is routinely mislabeled by the guess, and even a
+  /// same-hour capture can be wrong.
+  late MealType _mealType;
 
   final TextEditingController _correction = TextEditingController();
 
@@ -247,6 +263,7 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
   void initState() {
     super.initState();
     _warning = widget.draft.warning;
+    _mealType = widget.meal.mealType;
     _draft = MealReviewDraft(items: widget.draft.items);
     if (_draft.isEmpty) {
       // A malformed / empty draft still gets one editable row so the user can
@@ -651,16 +668,19 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
       _error = null;
     });
     try {
+      // The selector may have corrected the hour-based type guess (or a
+      // stored value on an edit); id, timestamp and note are unchanged.
+      final Meal meal = widget.meal.copyWith(mealType: _mealType);
       if (widget.editing) {
         // An edit of an already saved meal: the complete record replaces the
         // stored rows (a removed row must not survive).
         await ref
             .read(mealRepositoryProvider)
-            .updateMealWithItems(widget.meal, _draft.effectiveItems);
+            .updateMealWithItems(meal, _draft.effectiveItems);
       } else {
         await ref
             .read(mealRepositoryProvider)
-            .saveMealWithItems(widget.meal, _draft.effectiveItems);
+            .saveMealWithItems(meal, _draft.effectiveItems);
       }
     } catch (_) {
       if (!mounted) {
@@ -725,6 +745,28 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
                 style: TextStyle(color: theme.colorScheme.error),
               ),
             ],
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                S.of(context).reviewMealTypeLabel,
+                style: theme.textTheme.titleSmall,
+              ),
+            ),
+            const SizedBox(height: 8),
+            SegmentedButton<MealType>(
+              key: reviewMealTypeSelectorKey,
+              segments: <ButtonSegment<MealType>>[
+                for (final MealType type in MealType.values)
+                  ButtonSegment<MealType>(
+                    value: type,
+                    label: Text(mealTypeLabel(type)),
+                  ),
+              ],
+              selected: <MealType>{_mealType},
+              onSelectionChanged: (Set<MealType> selection) =>
+                  setState(() => _mealType = selection.first),
+            ),
             if (_canRevise) ...<Widget>[
               const SizedBox(height: 8),
               _buildRevisionPanel(context, offline: offline),

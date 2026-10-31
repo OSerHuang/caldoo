@@ -6,7 +6,8 @@
 ///
 /// Covered here are the day rules the screen exists for: it opens on
 /// **yesterday**, flips to **today** once yesterday is recorded, lets the user
-/// pick any earlier day (never a future one) and saves/clears the selected day
+/// pick any earlier day (never a future one), honours an explicitly pushed
+/// initial day (a past 概览 page's quick-add) and saves/clears the selected day
 /// only. The Material dialog strings are asserted in zh-CN, which is the locale
 /// the app boots with.
 library;
@@ -73,8 +74,8 @@ void main() {
 
   /// Pumps the screen (real zh-CN Material localizations, like production) on
   /// a tall surface. The container is owned by the test so a re-entry can share
-  /// it.
-  Future<void> pumpScreen(WidgetTester tester) async {
+  /// it. [initialDay] forwards the route's pushed target day, if any.
+  Future<void> pumpScreen(WidgetTester tester, {DateTime? initialDay}) async {
     tester.view.physicalSize = const Size(1200, 2600);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -83,15 +84,15 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const MaterialApp(
-          locale: Locale('zh', 'CN'),
-          supportedLocales: <Locale>[Locale('zh', 'CN')],
-          localizationsDelegates: <LocalizationsDelegate<dynamic>>[
+        child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: const <Locale>[Locale('zh', 'CN')],
+          localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
             GlobalMaterialLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
           ],
-          home: ExerciseEntryScreen(),
+          home: ExerciseEntryScreen(initialDay: initialDay),
         ),
       ),
     );
@@ -194,6 +195,32 @@ void main() {
     expect(fieldText(tester), '120');
     expect(valueText(tester), '已记录：120 kcal');
   });
+
+  testWidgets(
+    'a pushed initial day opens on exactly that day and saves there',
+    (WidgetTester tester) async {
+      // The quick-add on a past 概览 day page pushes the browsed day as the
+      // route's extra; the form must open on that day, not on its own
+      // yesterday/today default.
+      final DateTime pushedDay = DateTime.utc(2026, 9, 18);
+      await exerciseRepo.setKcal(dayKey: pushedDay, kcal: 90);
+      await pumpScreen(tester, initialDay: pushedDay);
+
+      // The pushed day — not the default — with its stored burn prefilled.
+      expect(dateText(tester), '2026年9月18日');
+      expect(fieldText(tester), '90');
+      expect(valueText(tester), '已记录：90 kcal');
+
+      await tester.enterText(find.byKey(exerciseKcalFieldKey), '180');
+      await tester.pumpAndSettle();
+      await save(tester);
+
+      expect((await exerciseRepo.getDay(pushedDay))!.kcal, 180);
+      // The default days are untouched by the explicit pick.
+      expect(await exerciseRepo.getDay(_yesterdayKey), isNull);
+      expect(await exerciseRepo.getDay(_todayKey), isNull);
+    },
+  );
 
   testWidgets('the 昨天/今天 shortcut switches days and loads their value', (
     WidgetTester tester,

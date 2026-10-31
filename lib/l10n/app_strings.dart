@@ -343,6 +343,9 @@ class S {
   /// values, not an AI estimate.
   String get reviewEditBanner => '已保存的记录，可直接修改';
 
+  /// Heading above the review screen's meal-type selector.
+  String get reviewMealTypeLabel => '餐次';
+
   /// Heading above a meal's food list.
   String get mealItemsHeading => '本餐食物';
 

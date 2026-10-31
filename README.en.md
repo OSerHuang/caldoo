@@ -11,7 +11,8 @@ UI is Chinese-only.)
 ## Features
 
 - **Log a meal**: by photo (AI analysis) or typed / keyboard-microphone
-  dictation; an AI failure never blocks saving
+  dictation; browse back on the Overview to backfill a past day (the meal
+  type is editable). An AI failure never blocks saving
 - **Food library**: photograph a printed nutrition label to create a food
   entry (one photo may contain several labels); every food is searchable and
   reusable

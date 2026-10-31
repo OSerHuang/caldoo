@@ -27,7 +27,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 
-import 'package:caldoo/core/time/date_windows.dart' show MealWithItems;
+import 'package:caldoo/core/time/date_windows.dart'
+    show MealWithItems, localDateOfKey;
 import 'package:caldoo/domain/models/models.dart';
 import 'package:caldoo/features/exercise/exercise_entry_screen.dart';
 import 'package:caldoo/features/meals/capture/meal_capture_controller.dart';
@@ -87,8 +88,15 @@ StatefulShellRoute _shellRoute() {
               _reviewRoute(),
               GoRoute(
                 path: 'exercise',
-                builder: (BuildContext context, GoRouterState state) =>
-                    const ExerciseEntryScreen(),
+                builder: (BuildContext context, GoRouterState state) {
+                  // Optional explicit day, pushed as `extra` by a past-day
+                  // page's quick-add; without it the screen applies its own
+                  // opening default (yesterday, or today when recorded).
+                  final Object? extra = state.extra;
+                  return ExerciseEntryScreen(
+                    initialDay: extra is DateTime ? extra : null,
+                  );
+                },
               ),
             ],
           ),
@@ -186,10 +194,16 @@ StatefulShellRoute _shellRoute() {
 /// The nested [ProviderScope] overrides `reviewRouterProvider` only for this
 /// route, so the capture screen's AI submit pushes the real task-19 review
 /// screen with a fresh owning [Meal] instead of the task-18 placeholder.
+///
+/// The route takes an optional backfill target: a past-day page's quick-add
+/// pushes the browsed day (a date-only day key, the `dayKeyOf` shape) as
+/// `extra`. Without it — today's page — the meal records "now" as before.
 GoRoute _captureRoute() {
   return GoRoute(
     path: 'capture',
     builder: (BuildContext context, GoRouterState state) {
+      final Object? extra = state.extra;
+      final DateTime? targetDay = extra is DateTime ? extra : null;
       return ProviderScope(
         overrides: [
           reviewRouterProvider.overrideWithValue((
@@ -197,13 +211,33 @@ GoRoute _captureRoute() {
             CaptureSubmission submission,
           ) {
             final DateTime now = clock.now();
+            // Backfill: stamp the meal at the current time of day on the
+            // browsed day, so the instant lands inside that day's local
+            // window while keeping the hour-based type guess meaningful
+            // (the review screen's type selector corrects it).
+            final DateTime timestamp;
+            if (targetDay == null) {
+              timestamp = now;
+            } else {
+              final DateTime localDay = localDateOfKey(targetDay);
+              timestamp = DateTime(
+                localDay.year,
+                localDay.month,
+                localDay.day,
+                now.hour,
+                now.minute,
+                now.second,
+                now.millisecond,
+                now.microsecond,
+              );
+            }
             return GoRouter.of(captureContext).push<bool>(
               '/today/review',
               extra: ReviewArgs(
                 draft: draftFromAnalysis(submission.draft),
                 meal: Meal(
                   id: const Uuid().v4(),
-                  timestamp: now,
+                  timestamp: timestamp,
                   mealType: mealTypeForHour(now.hour),
                 ),
                 photos: submission.photos,

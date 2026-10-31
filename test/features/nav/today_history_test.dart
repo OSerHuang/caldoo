@@ -7,8 +7,8 @@
 /// * offset 0 is today: today's intake/macros/date, today's FOOD row and the
 ///   two quick-add actions are all on screen;
 /// * swiping the finger right reveals yesterday's intake/macros/date and its
-///   food row, hides both quick-add actions (they always record "now") and
-///   shows the back-to-today action;
+///   food row, together with the same quick-add actions — they record into
+///   the browsed day, so backfilling yesterday is a first-class flow;
 /// * the log is a flat list of the day's foods — no meal-type buckets
 ///   (早餐/午餐/晚餐/加餐) and no per-meal "N 项" summaries;
 /// * the back-to-today action and the ‹ / › header buttons navigate between
@@ -25,10 +25,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:caldoo/core/ui/history_period_pager.dart';
 import 'package:caldoo/domain/models/models.dart';
 import 'package:caldoo/features/dashboard/daily/daily_summary_view.dart';
+import 'package:caldoo/features/meals/capture/meal_capture_screen.dart';
+import 'package:caldoo/features/meals/review/meal_review_screen.dart';
 import 'package:caldoo/features/nav/today_screen.dart';
 
+import '../../data/db/_test_db.dart';
 import '../../data/repositories/fake_repositories.dart';
 import '../dashboard/daily/_fixtures.dart' show dashboardNow;
+import '../meals/capture/_fakes.dart' show mealArguments, mealCompletion;
+import '../settings/_fakes.dart';
 import '_harness.dart';
 
 /// Only the on-screen (hit-testable) instance of [key].
@@ -143,7 +148,7 @@ void main() {
     expect(visible(todayQuickAddExerciseKey), findsOneWidget);
   });
 
-  testWidgets('swiping right shows yesterday: totals, food, no quick-add', (
+  testWidgets('swiping right shows yesterday: totals, food, quick-add', (
     WidgetTester tester,
   ) async {
     await pumpSeeded(tester);
@@ -174,9 +179,9 @@ void main() {
     expect(find.byKey(todayFoodRowKey('yesterday-item')), findsOneWidget);
     expect(find.byKey(todayFoodRowKey('today-item')), findsNothing);
 
-    // Quick-add would record "now", so a past page must not offer it.
-    expect(find.byKey(todayQuickAddMealKey), findsNothing);
-    expect(find.byKey(todayQuickAddExerciseKey), findsNothing);
+    // Quick-add records into the browsed day, so a past page offers it too.
+    expect(visible(todayQuickAddMealKey), findsOneWidget);
+    expect(visible(todayQuickAddExerciseKey), findsOneWidget);
   });
 
   testWidgets('back-to-today returns to today\'s numbers', (
@@ -322,4 +327,83 @@ void main() {
     expect(find.text('这一天没有记录'), findsOneWidget);
     expect(find.byKey(todayFoodRowKey('yesterday-item')), findsNothing);
   });
+
+  testWidgets(
+    'quick-add on yesterday\'s page backfills the meal into yesterday',
+    (WidgetTester tester) async {
+      usePhoneSurface(tester);
+      await seedTwoDays(env.meals);
+      // The real capture flow needs the AI seams: a served analysis for the
+      // submitted text, like the review-wiring tests.
+      final mock = mockDio((options) => mealCompletion(mealArguments));
+      final InMemorySecureKeyStore keyStore = InMemorySecureKeyStore();
+      await keyStore.write(testApiKey);
+      await env.pump(
+        tester,
+        dio: mock.dio,
+        keyStore: keyStore,
+        database: testDb(),
+      );
+
+      // Onto yesterday's page, then through the real capture route: the
+      // quick-add pushes the browsed day as the route's extra.
+      await tester.drag(
+        find.byKey(historyPagerKey('today')),
+        const Offset(600, 0),
+      );
+      await tester.pumpAndSettle();
+      await scrollTodayUntilVisible(tester, find.byKey(todayQuickAddMealKey));
+      await tester.tap(find.byKey(todayQuickAddMealKey));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('capture_text_field')),
+        '昨天的午饭',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('capture_submit_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(MealReviewScreen), findsOneWidget);
+      // The capture instant (12:00) guesses 午餐; a backfilling user corrects
+      // it through the type selector before saving.
+      expect(find.byKey(reviewMealTypeSelectorKey), findsOneWidget);
+      await tester.tap(find.text('晚餐'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(reviewSaveButtonKey));
+      await tester.pump();
+      await tester.tap(find.byKey(reviewSaveButtonKey));
+      await tester.pumpAndSettle();
+
+      // The save pops back to the capture screen; leave the flow entirely.
+      expect(find.byType(MealCaptureScreen), findsOneWidget);
+      await systemBack(tester);
+      await tester.pumpAndSettle();
+
+      // Still on yesterday's page, now including the backfilled meal:
+      // 400 (小米粥) + 174 (米饭). The meal recorded "now"-of-yesterday, so it
+      // lands in yesterday's window, never today's.
+      expect(_text(tester, historyPeriodLabelKey('today')), '1月4日 周日');
+      await scrollTodayUp(tester);
+      expect(_text(tester, dailyIntakeKcalKey), '574');
+      await scrollTodayUntilVisible(tester, find.text('米饭'));
+      expect(find.text('米饭'), findsOneWidget);
+    },
+  );
+}
+
+/// Scrolls the 今日 day view back towards the top (the totals card), the
+/// opposite of [scrollTodayUntilVisible].
+Future<void> scrollTodayUp(WidgetTester tester) async {
+  await tester.drag(
+    find
+        .byWidgetPredicate(
+          (Widget widget) =>
+              widget is Scrollable &&
+              widget.axisDirection == AxisDirection.down,
+        )
+        .first,
+    const Offset(0, 600),
+  );
+  await tester.pumpAndSettle();
 }

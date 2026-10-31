@@ -40,9 +40,13 @@
 /// is gone, so logging a meal / exercise is a flow of the 概览 tab and returns
 /// here.
 ///
-/// Quick-add is only offered on today's day page: meal capture records "now",
-/// so adding from a past page — or from a week/month view — would log the meal
-/// on the wrong day.
+/// Quick-add is offered on **every day page** of the 日 view and records into
+/// the browsed day: the capture / exercise-entry routes receive that day as
+/// their `extra` (today's page pushes none, so a capture still records
+/// "now"), so a backfilled meal or burn lands on the day being viewed — the
+/// review screen's type selector corrects the hour-based meal-type guess.
+/// Week and month views show their chart and cumulative totals only: they have
+/// no single day to attribute a record to.
 ///
 /// Everything is driven by the task-24/22/26 `watch` streams, so the numbers and
 /// the list update the moment a meal or exercise is saved on another route.
@@ -363,30 +367,36 @@ class _DayPageBody extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: <Widget>[
         DailySummaryView(dayKey: dayKey, isToday: isToday),
-        if (isToday) ...<Widget>[
-          const SizedBox(height: 16),
-          Row(
-            children: <Widget>[
-              Expanded(
-                child: FilledButton.icon(
-                  key: todayQuickAddMealKey,
-                  onPressed: () => context.push('/today/capture'),
-                  icon: const Icon(Icons.restaurant_menu),
-                  label: Text(S.of(context).quickAddMeal),
+        const SizedBox(height: 16),
+        Row(
+          children: <Widget>[
+            Expanded(
+              child: FilledButton.icon(
+                key: todayQuickAddMealKey,
+                // Today records "now" (no target day); a past day pushes its
+                // date-only key so the capture route backfills into it.
+                onPressed: () => context.push(
+                  '/today/capture',
+                  extra: isToday ? null : dayKey,
                 ),
+                icon: const Icon(Icons.restaurant_menu),
+                label: Text(S.of(context).quickAddMeal),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: OutlinedButton.icon(
-                  key: todayQuickAddExerciseKey,
-                  onPressed: () => context.push('/today/exercise'),
-                  icon: const Icon(Icons.directions_run),
-                  label: Text(S.of(context).quickAddExercise),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: OutlinedButton.icon(
+                key: todayQuickAddExerciseKey,
+                onPressed: () => context.push(
+                  '/today/exercise',
+                  extra: isToday ? null : dayKey,
                 ),
+                icon: const Icon(Icons.directions_run),
+                label: Text(S.of(context).quickAddExercise),
               ),
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
         const SizedBox(height: 24),
         SectionHeader(
           title: isToday

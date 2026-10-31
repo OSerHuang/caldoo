@@ -78,7 +78,16 @@ String exerciseDayLabel(S strings, DateTime day, DateTime today) {
 
 /// The exercise-burn entry screen.
 class ExerciseEntryScreen extends ConsumerStatefulWidget {
-  const ExerciseEntryScreen({super.key});
+  const ExerciseEntryScreen({super.key, this.initialDay});
+
+  /// Optional explicit target day (a date-only day key), pushed as the route's
+  /// `extra` by a past-day page's quick-add.
+  ///
+  /// When set, the form opens on exactly that day — not on the opening
+  /// default (yesterday, or today when yesterday is recorded) — so recording
+  /// from a browsed day lands on the day being viewed. The stored burn of
+  /// that day is loaded for editing as usual.
+  final DateTime? initialDay;
 
   @override
   ConsumerState<ExerciseEntryScreen> createState() =>
@@ -99,12 +108,22 @@ class _ExerciseEntryScreenState extends ConsumerState<ExerciseEntryScreen> {
   void initState() {
     super.initState();
     // Re-apply the opening date default on every entry: an async read of
-    // yesterday's row decides between yesterday and today. Riverpod forbids
-    // modifying a provider while the tree is building, so the reset is deferred
-    // by one microtask (it runs before the first frame the user can tap).
+    // yesterday's row decides between yesterday and today — unless the route
+    // carries an explicit day (a past-day page's quick-add), which wins.
+    // Riverpod forbids modifying a provider while the tree is building, so the
+    // reset/select is deferred by one microtask (it runs before the first
+    // frame the user can tap).
     Future<void>.microtask(() {
       if (mounted) {
-        ref.read(exerciseSelectedDayProvider.notifier).reset();
+        final ExerciseSelectedDay notifier = ref.read(
+          exerciseSelectedDayProvider.notifier,
+        );
+        final DateTime? day = widget.initialDay;
+        if (day == null) {
+          notifier.reset();
+        } else {
+          notifier.select(day);
+        }
       }
     });
   }

@@ -227,6 +227,36 @@ void main() {
     );
   });
 
+  testWidgets('the meal-type selector corrects the hour-based guess on save', (
+    WidgetTester tester,
+  ) async {
+    // testMeal() carries the capture route's hour-based guess (午餐): the
+    // selector seeds from it, and a backfilled meal routinely needs it fixed.
+    final RecordingMealRepository repo = await _pumpReview(
+      tester,
+      items: <MealItem>[riceItem()],
+    );
+    final Meal payload = testMeal();
+
+    // The selector offers exactly the four types.
+    expect(find.byKey(reviewMealTypeSelectorKey), findsOneWidget);
+    for (final String label in <String>['早餐', '午餐', '晚餐', '加餐']) {
+      expect(find.text(label), findsOneWidget);
+    }
+
+    // Switch the type, then save: the record carries the selected type, with
+    // id and timestamp untouched.
+    await tester.tap(find.text('晚餐'));
+    await tester.pumpAndSettle();
+    await _tapVisible(tester, reviewSaveButtonKey);
+
+    expect(repo.saves, hasLength(1));
+    final Meal saved = repo.saves.single.meal;
+    expect(saved.mealType, MealType.dinner);
+    expect(saved.id, payload.id);
+    expect(saved.timestamp, payload.timestamp);
+  });
+
   testWidgets('a label-backed item recomputes from per-100 g on grams edit', (
     WidgetTester tester,
   ) async {
