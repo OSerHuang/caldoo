@@ -1,5 +1,5 @@
 # CI gate for every push to master and every PR. The release flow lives in
-# .github/workflows/release.yml (tag-driven); see README "CI/CD".
+# .github/workflows/release.yml (tag-driven).
 name: CI
 
 on:
