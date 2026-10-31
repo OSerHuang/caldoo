@@ -28,13 +28,15 @@ import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:caldoo/core/time/date_windows.dart'
-    show MealWithItems, localDateOfKey;
+    show LocalOffset, MealWithItems;
 import 'package:caldoo/domain/models/models.dart';
 import 'package:caldoo/features/exercise/exercise_entry_screen.dart';
 import 'package:caldoo/features/meals/capture/meal_capture_controller.dart';
 import 'package:caldoo/features/meals/capture/meal_capture_screen.dart';
 import 'package:caldoo/features/meals/label/label_capture_screen.dart';
 import 'package:caldoo/features/meals/review/meal_review_screen.dart';
+import 'package:caldoo/features/meals/summary/meal_summary_providers.dart'
+    show localOffsetProvider;
 import 'package:caldoo/features/meals/saved_foods/food_library_screen.dart';
 import 'package:caldoo/features/nav/meal_detail_screen.dart';
 import 'package:caldoo/features/nav/nav_shell.dart';
@@ -211,25 +213,28 @@ GoRoute _captureRoute() {
             CaptureSubmission submission,
           ) {
             final DateTime now = clock.now();
-            // Backfill: stamp the meal at the current time of day on the
-            // browsed day, so the instant lands inside that day's local
-            // window while keeping the hour-based type guess meaningful
-            // (the review screen's type selector corrects it).
+            final LocalOffset offset = ProviderScope.containerOf(
+              captureContext,
+            ).read(localOffsetProvider);
+            // Backfill: stamp the meal at **noon of the target day under the
+            // app's own offset** — the same offset every day window resolves
+            // with — so the instant is provably inside that day's window for
+            // any supported UTC offset (±14h) and never depends on the
+            // machine's clock or timezone. The hour-based type guess is
+            // meaningless for a backfill, so it defaults to the noon meal;
+            // the review screen's type selector corrects it.
             final DateTime timestamp;
+            final MealType mealType;
             if (targetDay == null) {
               timestamp = now;
+              mealType = mealTypeForHour(now.hour);
             } else {
-              final DateTime localDay = localDateOfKey(targetDay);
-              timestamp = DateTime(
-                localDay.year,
-                localDay.month,
-                localDay.day,
-                now.hour,
-                now.minute,
-                now.second,
-                now.millisecond,
-                now.microsecond,
-              );
+              timestamp = DateTime.utc(
+                targetDay.year,
+                targetDay.month,
+                targetDay.day,
+              ).subtract(offset.duration).add(const Duration(hours: 12));
+              mealType = MealType.lunch;
             }
             return GoRouter.of(captureContext).push<bool>(
               '/today/review',
@@ -238,7 +243,7 @@ GoRoute _captureRoute() {
                 meal: Meal(
                   id: const Uuid().v4(),
                   timestamp: timestamp,
-                  mealType: mealTypeForHour(now.hour),
+                  mealType: mealType,
                 ),
                 photos: submission.photos,
                 userText: submission.userText,
