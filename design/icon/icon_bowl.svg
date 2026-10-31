@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F7F8F3"/>
+      <stop offset="1" stop-color="#E7EBDD"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.30" r="0.80">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="232" fill="url(#bg)"/>
+  <rect width="1024" height="1024" rx="232" fill="url(#glow)"/>
+  <g id="art">
+  <!-- floating grains -->
+  <circle cx="352" cy="336" r="9" fill="#D6E0C9"/>
+  <circle cx="686" cy="282" r="7" fill="#D6E0C9"/>
+  <!-- steam -->
+  <g fill="none" stroke="#C5D3BB" stroke-width="22" stroke-linecap="round" opacity="0.95">
+    <path d="M 446 470 C 420 426 466 394 444 346 C 432 320 436 296 452 274"/>
+    <path d="M 512 452 C 484 406 532 372 506 322 C 492 294 497 268 514 244"/>
+    <path d="M 578 470 C 552 426 598 394 576 346 C 564 320 568 296 584 274"/>
+  </g>
+  <!-- bowl -->
+  <rect x="442" y="700" width="140" height="30" rx="15" fill="#A9BCA0"/>
+  <ellipse cx="512" cy="498" rx="222" ry="40" fill="#E9EFDF"/>
+  <path d="M 290 498 A 222 40 0 0 1 734 498 C 718 624 624 712 512 712 C 400 712 306 624 290 498 Z" fill="#B6C7AD"/>
+  <!-- leaf garnish -->
+  <path d="M 664 462 C 672 424 702 402 740 404 C 740 442 712 466 676 464 C 672 462 668 461 664 462 Z" fill="#9EB995"/>
+  <path d="M 674 456 C 694 444 716 428 732 412" fill="none" stroke="#7E9778" stroke-width="5" stroke-linecap="round"/>
+  </g>
+</svg>

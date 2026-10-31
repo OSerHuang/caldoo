@@ -1,0 +1,17 @@
+# build_runner configuration.
+#
+# The `databases:` entry is what makes drift's guided-migration tooling
+# (`dart run drift_dev schema dump` / `dart run drift_dev make-migrations`)
+# aware of our root database. `schema_dir` is where the exported per-version
+# schema snapshots live (e.g. `drift_schemas/drift_schema_v1.json`), and
+# `test_dir` is where make-migrations writes the generated migration-test
+# scaffolding (see `test/data/db/`, where the real v1 -> v2 test lives).
+targets:
+  $default:
+    builders:
+      drift_dev:
+        options:
+          databases:
+            app_database: lib/data/db/app_database.dart
+          schema_dir: drift_schemas/
+          test_dir: test/data/db/

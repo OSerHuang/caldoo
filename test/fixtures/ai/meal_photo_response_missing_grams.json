@@ -1,0 +1,33 @@
+{
+  "id": "fixture-missing-grams-meal",
+  "object": "chat.completion",
+  "created": 1790074901,
+  "model": "deepseek-flash",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+          {
+            "index": 0,
+            "id": "call_fixture_missing_grams",
+            "type": "function",
+            "function": {
+              "name": "emit_meal_items",
+              "arguments": "{\"items\": [{\"name\": \"米饭\", \"kcal\": 174, \"carb_g\": 38.7, \"protein_g\": 3.9, \"fat_g\": 0.5, \"salt_g\": 0.0, \"confidence\": 0.9}]}"
+            }
+          }
+        ]
+      },
+      "logprobs": null,
+      "finish_reason": "tool_calls"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "total_tokens": 0
+  }
+}

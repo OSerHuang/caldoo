@@ -1,0 +1,10 @@
+# package:test configuration.
+#
+# `ui-renders` marks the golden tests under test/ui_renders/ (the screen
+# renders and the font probe). The goldens are macOS-generated review
+# artifacts, not CI gates: text rasterization differs across platforms, so CI
+# runs `flutter test --exclude-tags=ui-renders` while local runs
+# (`flutter test`, `flutter test --update-goldens test/ui_renders`) are
+# unaffected.
+tags:
+  ui-renders: {}

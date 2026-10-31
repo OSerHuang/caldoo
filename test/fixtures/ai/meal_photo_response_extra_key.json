@@ -1,0 +1,33 @@
+{
+  "id": "fixture-extra-key-meal",
+  "object": "chat.completion",
+  "created": 1790074900,
+  "model": "deepseek-flash",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+          {
+            "index": 0,
+            "id": "call_fixture_extra_key",
+            "type": "function",
+            "function": {
+              "name": "emit_meal_items",
+              "arguments": "{\"meal_note\": \"食堂套餐\", \"items\": [{\"name\": \"米饭\", \"grams\": 200, \"kcal\": 232, \"carb_g\": 51.6, \"protein_g\": 5.2, \"fat_g\": 0.7, \"salt_g\": 0.0, \"confidence\": 0.9, \"portion_note\": \"一大碗\"}, {\"name\": \"西红柿炒鸡蛋\", \"grams\": 250, \"kcal\": 260, \"carb_g\": 12.0, \"protein_g\": 14.0, \"fat_g\": 17.0, \"salt_g\": 2.2, \"confidence\": 0.8, \"spice\": \"none\"}]}"
+            }
+          }
+        ]
+      },
+      "logprobs": null,
+      "finish_reason": "tool_calls"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "total_tokens": 0
+  }
+}

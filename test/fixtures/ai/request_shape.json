@@ -1,0 +1,419 @@
+{
+  "recorded_at": "2026-09-22T11:00:20.715776Z",
+  "endpoint": "POST https://api.deepseek.com/chat/completions",
+  "base_url": "https://api.deepseek.com",
+  "model": "deepseek-flash",
+  "headers": {
+    "Content-Type": "application/json",
+    "Accept": "application/json",
+    "Authorization": "<REDACTED>"
+  },
+  "mode_primary_strict_tool": {
+    "thinking": {
+      "type": "disabled"
+    },
+    "temperature": 0,
+    "max_tokens": 8192,
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "emit_meal_items",
+          "description": "上报识别到的食物条目",
+          "strict": true,
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "grams": {
+                      "type": "number"
+                    },
+                    "kcal": {
+                      "type": "number"
+                    },
+                    "carb_g": {
+                      "type": "number"
+                    },
+                    "protein_g": {
+                      "type": "number"
+                    },
+                    "fat_g": {
+                      "type": "number"
+                    },
+                    "salt_g": {
+                      "type": "number"
+                    },
+                    "confidence": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "grams",
+                    "kcal",
+                    "carb_g",
+                    "protein_g",
+                    "fat_g",
+                    "salt_g",
+                    "confidence"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "items"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "emit_nutrition_label",
+          "description": "上报营养成分表数值",
+          "strict": true,
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "energy_kj": {
+                "type": "number"
+              },
+              "protein_g": {
+                "type": "number"
+              },
+              "fat_g": {
+                "type": "number"
+              },
+              "saturated_fat_g": {
+                "type": "number"
+              },
+              "carbohydrate_g": {
+                "type": "number"
+              },
+              "sugar_g": {
+                "type": "number"
+              },
+              "sodium_mg": {
+                "type": "number"
+              },
+              "nrv_energy": {
+                "type": "number"
+              },
+              "nrv_protein": {
+                "type": "number"
+              },
+              "nrv_fat": {
+                "type": "number"
+              },
+              "nrv_saturated_fat": {
+                "type": "number"
+              },
+              "nrv_carbohydrate": {
+                "type": "number"
+              },
+              "nrv_sugar": {
+                "type": "number"
+              },
+              "nrv_sodium": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "energy_kj",
+              "protein_g",
+              "fat_g",
+              "saturated_fat_g",
+              "carbohydrate_g",
+              "sugar_g",
+              "sodium_mg",
+              "nrv_energy",
+              "nrv_protein",
+              "nrv_fat",
+              "nrv_saturated_fat",
+              "nrv_carbohydrate",
+              "nrv_sugar",
+              "nrv_sodium"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    ],
+    "tool_choice": {
+      "type": "function",
+      "function": {
+        "name": "emit_meal_items | emit_nutrition_label"
+      }
+    }
+  },
+  "mode_alternate_json_object": {
+    "thinking": {
+      "type": "disabled"
+    },
+    "temperature": 0,
+    "max_tokens": 8192,
+    "response_format": {
+      "type": "json_object"
+    }
+  },
+  "messages_shape": {
+    "meal_photo": [
+      {
+        "role": "system",
+        "content": "你是一名严谨的中式饮食营养分析助手。只输出一个 JSON 对象，不要输出 Markdown、解释或任何多余文字。数值按可食用部分合理估算。"
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "识别照片中的全部食物，只输出一个 JSON 对象，形如：{\"items\":[{\"name\":\"食物名(中文)\",\"grams\":克数,\"kcal\":千卡,\"carb_g\":碳水克,\"protein_g\":蛋白质克,\"fat_g\":脂肪克,\"salt_g\":盐克,\"confidence\":0到1}]} 。items 覆盖图中所有食物，salt_g 为食盐当量。"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "data:image/jpeg;base64,<REDACTED_IMAGE_BYTES base64_chars=798756>"
+            }
+          }
+        ]
+      }
+    ],
+    "meal_text": [
+      {
+        "role": "system",
+        "content": "你是一名严谨的中式饮食营养分析助手。只输出一个 JSON 对象，不要输出 Markdown、解释或任何多余文字。数值按可食用部分合理估算。"
+      },
+      {
+        "role": "user",
+        "content": "估算这顿中式饮食：两个鸡蛋、一碗米饭（约150克）。只输出一个 JSON 对象，形如：{\"items\":[{\"name\":\"食物名(中文)\",\"grams\":克数,\"kcal\":千卡,\"carb_g\":碳水克,\"protein_g\":蛋白质克,\"fat_g\":脂肪克,\"salt_g\":盐克,\"confidence\":0到1}]} 。"
+      }
+    ],
+    "label_photo": [
+      {
+        "role": "system",
+        "content": "你是一名读取中国 GB 28050 营养成分表的助手。只输出一个 JSON 对象，不要输出 Markdown、解释或任何多余文字。"
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "读取这张营养标签照片（每 100g 标示），只输出一个 JSON 对象，字段为：energy_kj, protein_g, fat_g, saturated_fat_g, carbohydrate_g, sugar_g, sodium_mg, nrv_energy, nrv_protein, nrv_fat, nrv_saturated_fat, nrv_carbohydrate, nrv_sugar, nrv_sodium 。nrv_* 填 NRV% 列的数值（百分数）。"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "data:image/jpeg;base64,<REDACTED_IMAGE_BYTES base64_chars=500328>"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "response_format_json_schema_attempt": {
+    "shape": {
+      "response_format": {
+        "type": "json_schema",
+        "json_schema": {
+          "name": "meal_items",
+          "strict": true,
+          "schema": {
+            "type": "object",
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "grams": {
+                      "type": "number"
+                    },
+                    "kcal": {
+                      "type": "number"
+                    },
+                    "carb_g": {
+                      "type": "number"
+                    },
+                    "protein_g": {
+                      "type": "number"
+                    },
+                    "fat_g": {
+                      "type": "number"
+                    },
+                    "salt_g": {
+                      "type": "number"
+                    },
+                    "confidence": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "grams",
+                    "kcal",
+                    "carb_g",
+                    "protein_g",
+                    "fat_g",
+                    "salt_g",
+                    "confidence"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "items"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    "result": "REJECTED",
+    "http_status": 400,
+    "raw_error_body": "{\"error\":{\"message\":\"This response_format type is unavailable now\",\"type\":\"invalid_request_error\",\"param\":null,\"code\":\"invalid_request_error\"}}",
+    "documented_supported_types": [
+      "text",
+      "json_object"
+    ],
+    "docs": "https://api-docs.deepseek.com/api/create-chat-completion"
+  },
+  "spike_observations": {
+    "models_probe": {
+      "endpoint": "GET https://api.deepseek.com/models",
+      "http_status": 200,
+      "model_ids": [
+        "deepseek-flash",
+        "deepseek-v4-pro"
+      ],
+      "vision_capable": "deepseek-flash (per https://api-docs.deepseek.com/guides/vision)"
+    },
+    "json_schema_probe": {
+      "deepseek-flash": 400,
+      "deepseek-v4-pro": 400,
+      "message": "This response_format type is unavailable now"
+    },
+    "json_object_quirk_observed_earlier_run": {
+      "call": "nutrition label photo with response_format=json_object",
+      "observed": "message.content = \"{\\\"type\\\": \\\"json_object\\\"}\\n\" + the real JSON object",
+      "raw_preserved_in": "label_photo_response_json_object.json (re-run may vary)"
+    },
+    "canonical_mode": "strict tool call (server-enforced schema); *_response.json files hold tool_calls[0].function.arguments JSON",
+    "calls": [
+      {
+        "fixture": "meal_photo_response.json",
+        "http_status": 200,
+        "elapsed_ms": 4185,
+        "finish_reason": "tool_calls",
+        "validation": "PASS",
+        "usage": {
+          "prompt_tokens": 1522,
+          "completion_tokens": 990,
+          "total_tokens": 2512,
+          "prompt_tokens_details": {
+            "cached_tokens": 1280
+          },
+          "prompt_cache_hit_tokens": 1280,
+          "prompt_cache_miss_tokens": 242
+        }
+      },
+      {
+        "fixture": "meal_text_response.json",
+        "http_status": 200,
+        "elapsed_ms": 1088,
+        "finish_reason": "tool_calls",
+        "validation": "PASS",
+        "usage": {
+          "prompt_tokens": 516,
+          "completion_tokens": 158,
+          "total_tokens": 674,
+          "prompt_tokens_details": {
+            "cached_tokens": 382
+          },
+          "prompt_cache_hit_tokens": 382,
+          "prompt_cache_miss_tokens": 134
+        }
+      },
+      {
+        "fixture": "label_photo_response.json",
+        "http_status": 200,
+        "elapsed_ms": 1742,
+        "finish_reason": "tool_calls",
+        "validation": "PASS",
+        "usage": {
+          "prompt_tokens": 1236,
+          "completion_tokens": 292,
+          "total_tokens": 1528,
+          "prompt_tokens_details": {
+            "cached_tokens": 1024
+          },
+          "prompt_cache_hit_tokens": 1024,
+          "prompt_cache_miss_tokens": 212
+        }
+      },
+      {
+        "fixture": "meal_photo_response_json_object.json",
+        "http_status": 200,
+        "elapsed_ms": 20061,
+        "finish_reason": "length",
+        "validation": "FAIL|content not JSON: FormatException: Unterminated string (at character 19356)\n...\"fat_g\":0.5,\"salt_g\":0.0,\"confidence\":0.95},{\"name\":\"白米饭\",\"grams\":150,\"kcal\n                                                                              ^\n",
+        "usage": {
+          "prompt_tokens": 1149,
+          "completion_tokens": 8192,
+          "total_tokens": 9341,
+          "prompt_tokens_details": {
+            "cached_tokens": 896
+          },
+          "prompt_cache_hit_tokens": 896,
+          "prompt_cache_miss_tokens": 253
+        }
+      },
+      {
+        "fixture": "meal_text_response_json_object.json",
+        "http_status": 200,
+        "elapsed_ms": 1133,
+        "finish_reason": "stop",
+        "validation": "PASS",
+        "usage": {
+          "prompt_tokens": 143,
+          "completion_tokens": 97,
+          "total_tokens": 240,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "prompt_cache_hit_tokens": 0,
+          "prompt_cache_miss_tokens": 143
+        }
+      },
+      {
+        "fixture": "label_photo_response_json_object.json",
+        "http_status": 200,
+        "elapsed_ms": 2109,
+        "finish_reason": "stop",
+        "validation": "FAIL|content not JSON: FormatException: Unexpected character (at line 2, character 1)\n{\"energy_kj\": 221, \"protein_g\": 1.5, \"fat_g\": 0.6, \"saturated_fat_g\": 0, \"c...\n^\n",
+        "usage": {
+          "prompt_tokens": 751,
+          "completion_tokens": 140,
+          "total_tokens": 891,
+          "prompt_tokens_details": {
+            "cached_tokens": 512
+          },
+          "prompt_cache_hit_tokens": 512,
+          "prompt_cache_miss_tokens": 239
+        }
+      }
+    ]
+  }
+}

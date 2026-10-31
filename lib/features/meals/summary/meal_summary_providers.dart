@@ -1,0 +1,78 @@
+/// Riverpod wiring for the per-meal summary (task 22).
+///
+/// The running 今日累计 is derived from the [MealRepository]'s `watch` stream,
+/// never from a cached read: [todayTotalsProvider] watches
+/// [todayMealsProvider], which is a [StreamProvider] over
+/// [MealRepository.watchMealsForDay]. Saving through [mealSaveControllerProvider]
+/// makes the fake/Drift change stream emit and the totals recompute.
+///
+/// The clock and the local offset are injected (like task 9's rollups) so a
+/// test pins a day deterministically; production reads the device time.
+library;
+
+import 'package:clock/clock.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'package:caldoo/core/providers/app_providers.dart';
+import 'package:caldoo/core/time/date_windows.dart';
+import 'package:caldoo/core/time/day_tick_provider.dart';
+
+import 'day_window.dart';
+import 'meal_save_controller.dart';
+import 'meal_totals.dart';
+
+/// The time seam; production reads the ambient [clock], tests fix it.
+final summaryClockProvider = Provider<Clock>((ref) => clock);
+
+/// The device's current UTC offset as minutes east of Greenwich.
+///
+/// Re-read on every [dayTickProvider] signal, so a timezone change while the
+/// process is alive re-derives the day windows instead of keeping the
+/// launch-time offset. The app's day boundaries are deliberately fixed to the
+/// local calendar date and are not configurable.
+final localOffsetProvider = Provider<LocalOffset>((ref) {
+  ref.watch(dayTickProvider);
+  return LocalOffset(DateTime.now().timeZoneOffset.inMinutes);
+});
+
+/// `[start, end)` instants of the local day containing "now".
+///
+/// Re-derived on every [dayTickProvider] signal (app resume, the minute poll),
+/// so the running 今日累计 follows the calendar across a warm start instead of
+/// totting up the launch day forever. The window's key is a value-equal UTC
+/// midnight, so a tick that does not cross a day boundary notifies nothing
+/// downstream.
+final todayWindowProvider = Provider<LocalDayWindow>((ref) {
+  ref.watch(dayTickProvider);
+  final LocalDayWindow window = localDayWindow(
+    ref.watch(summaryClockProvider).now(),
+    ref.watch(localOffsetProvider),
+  );
+  return window;
+});
+
+/// Today's meals **with their items**, live from the repository.
+final todayMealsProvider = StreamProvider<List<MealWithItems>>((ref) {
+  final LocalDayWindow window = ref.watch(todayWindowProvider);
+  return ref
+      .watch(mealRepositoryProvider)
+      .watchMealsForDay(
+        dayStartInclusive: window.start,
+        dayEndExclusive: window.end,
+      );
+});
+
+/// The running 今日累计 intake, recomputed on every repository emission.
+///
+/// An empty (or still-loading) stream yields [MealTotals.zero] rather than an
+/// error, so the card always renders a number.
+final todayTotalsProvider = Provider<MealTotals>((ref) {
+  final List<MealWithItems> meals =
+      ref.watch(todayMealsProvider).value ?? const <MealWithItems>[];
+  return MealTotals.fromMeals(meals);
+});
+
+/// The validated save path used by the summary screen.
+final mealSaveControllerProvider = Provider<MealSaveController>(
+  (ref) => MealSaveController(ref.watch(mealRepositoryProvider)),
+);

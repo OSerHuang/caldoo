@@ -1,0 +1,242 @@
+/// Period-neutral value layer for the dashboard summaries (a week, a month).
+///
+/// A **period** is any calendar-contiguous, ordered list of local
+/// [DayRollup]s: seven for a Mon..Sun week, 28..31 for a calendar month. The
+/// merge of 汇总 into 概览 is what made the layer period-neutral: the week and
+/// month views are the same dashboard at different zoom levels, so they must
+/// share the metric definitions here, in exactly one place, and can never
+/// drift:
+///
+/// * **logged day** — a [DayRollup] with `mealCount >= 1` (at least one MEAL).
+///   An exercise-only day is **not** logged.
+/// * **total intake** — the sum of the logged days' intake kcal: the period's
+///   running food energy.
+/// * **total burn** — the sum of the logged days' budgets (`bmr + exercise`),
+///   so each logged day's exercise is added on top of the BMR exactly as the
+///   energy engine does it.
+/// * **difference** — `total intake - total burn`: the period's running
+///   `energyBalanceKcal` sum. Negative = 缺口 (deficit), positive = 盈余
+///   (surplus), exactly the task-7 sign convention.
+///
+/// These are **cumulative totals for the period so far, never averages**; only
+/// the logged days contribute, so an exercise-only day adds nothing (matching
+/// its empty bar in the chart).
+///
+/// * **salt adherence** — `adherentDays / loggedDays`, where an adherent day is
+///   a logged day whose sodium total is `<=` the WHO 2000 mg ceiling.
+/// * **target line** — the profile's resolved basal metabolic rate (the user's
+///   own BMR override, or the Mifflin-St Jeor estimate — **excluding**
+///   exercise). A single flat line cannot represent the per-day
+///   exercise-varying budgets, so the line is deliberately the exercise-free
+///   baseline; the week/month dashboards label it distinctly from the daily
+///   dashboard's `今日额度(含运动)`.
+///
+/// The balance/budget numbers come ONLY from the energy engine
+/// ([computeEnergyBudget]); this file never re-derives BMR or the budget.
+library;
+
+import 'package:caldoo/core/math/energy_balance.dart';
+import 'package:caldoo/core/units/nutrition_units.dart';
+import 'package:caldoo/domain/models/day_rollup.dart';
+import 'package:caldoo/domain/models/user_profile.dart';
+
+/// WHO daily sodium ceiling in mg, derived from the canonical
+/// [dailySaltTargetG] (`5 g salt == 2000 mg Na`) so the two can never diverge.
+final double dailySodiumTargetMg = saltGToSodiumMg(dailySaltTargetG);
+
+/// One period's running (cumulative) totals.
+final class PeriodSummary {
+  /// Creates a period summary from already-computed metrics.
+  const PeriodSummary({
+    required this.days,
+    required this.baseBudgetKcal,
+    required this.loggedDays,
+    required this.adherentDays,
+    required this.totalIntakeKcal,
+    required this.totalBurnKcal,
+    required this.totalBalanceKcal,
+  });
+
+  /// One rollup per day of the period, in calendar order (seven for a week,
+  /// 28..31 for a month — the chart plots these in order).
+  final List<DayRollup> days;
+
+  /// The exercise-free daily baseline (the resolved BMR) in **whole kcal**,
+  /// drawn as the dashed target line. Never `null`: a [PeriodSummary] only
+  /// exists for a complete profile.
+  final int baseBudgetKcal;
+
+  /// How many days of the period logged at least one meal
+  /// (`mealCount >= 1`).
+  final int loggedDays;
+
+  /// How many logged days stayed at or under [dailySodiumTargetMg].
+  final int adherentDays;
+
+  /// Sum of the logged days' intake kcal — the period's running intake.
+  final int totalIntakeKcal;
+
+  /// Sum of the logged days' budgets (`bmr + exercise`) — the period's running
+  /// burn. Exercise on a logged day is included; an exercise-only day is not.
+  final int totalBurnKcal;
+
+  /// `totalIntakeKcal - totalBurnKcal` over the logged days.
+  ///
+  /// Positive = 盈余, negative = 缺口 — exactly the task-7 sign convention.
+  final int totalBalanceKcal;
+
+  /// `adherentDays / loggedDays` (0 when there are no logged days).
+  double get saltAdherence => loggedDays == 0 ? 0 : adherentDays / loggedDays;
+
+  /// `true` when the day at [index] (in calendar order) logged at least one
+  /// meal.
+  bool isLogged(int index) => days[index].mealCount >= 1;
+}
+
+/// The period dashboard's sealed view state.
+sealed class PeriodSummaryState {
+  const PeriodSummaryState();
+}
+
+/// One or more live inputs are still loading; the dashboard shows a spinner
+/// rather than a guessed number.
+final class PeriodSummaryLoading extends PeriodSummaryState {
+  /// Creates the loading state.
+  const PeriodSummaryLoading();
+}
+
+/// No day in the period logged a meal: the chart has nothing to plot, so the
+/// dashboard shows an empty state instead of an all-zero (or
+/// division-by-zero) summary.
+final class PeriodSummaryEmpty extends PeriodSummaryState {
+  /// Creates the empty state for the period's [days] (all unlogged).
+  const PeriodSummaryEmpty(this.days);
+
+  /// The period's (all unlogged) rollups, in calendar order.
+  final List<DayRollup> days;
+}
+
+/// The period has logged data but no complete profile exists.
+///
+/// The target line, total burn and the difference are **hidden** (none can be
+/// computed without a budget) and replaced by a "完善资料" prompt. Total intake,
+/// logged days and salt adherence do not need the profile and are carried here,
+/// computed with the exact same rules as [PeriodSummary].
+final class PeriodSummaryNoProfile extends PeriodSummaryState {
+  /// Creates the incomplete-profile state.
+  const PeriodSummaryNoProfile({
+    required this.days,
+    required this.loggedDays,
+    required this.adherentDays,
+    required this.totalIntakeKcal,
+  });
+
+  /// The period's rollups, in calendar order.
+  final List<DayRollup> days;
+
+  /// How many days logged at least one meal.
+  final int loggedDays;
+
+  /// How many logged days stayed at or under [dailySodiumTargetMg].
+  final int adherentDays;
+
+  /// Sum of the logged days' intake kcal — the period's running intake.
+  final int totalIntakeKcal;
+
+  /// `adherentDays / loggedDays`.
+  double get saltAdherence => loggedDays == 0 ? 0 : adherentDays / loggedDays;
+}
+
+/// A complete period summary.
+final class PeriodSummaryReady extends PeriodSummaryState {
+  /// Creates the ready state.
+  const PeriodSummaryReady(this.summary);
+
+  /// The computed metrics.
+  final PeriodSummary summary;
+}
+
+/// Builds the [PeriodSummaryState] from the period's day rollups and the
+/// profile.
+///
+/// Precedence: loading is handled by the provider; then **empty** (no logged
+/// days) wins over no-profile so a blank period is a blank period regardless of
+/// the profile; then no-profile; then the full summary. [days] may be shorter
+/// than a full period (or empty) — anything without a logged day is empty,
+/// never a crash.
+///
+/// The totals are summed over the LOGGED days only (the same set the chart
+/// plots), so an exercise-only day never contributes to the period's running
+/// numbers. [today] is forwarded unchanged to the energy engine, which derives
+/// the profile's age from it.
+PeriodSummaryState buildPeriodSummary({
+  required List<DayRollup> days,
+  required UserProfile? profile,
+  required DateTime today,
+}) {
+  final List<DayRollup> logged = <DayRollup>[
+    for (final day in days)
+      if (day.mealCount >= 1) day,
+  ];
+  if (logged.isEmpty) {
+    return PeriodSummaryEmpty(days);
+  }
+
+  // Profile-independent metrics first: a missing profile must not hide the
+  // intake/day/adherence numbers.
+  var intakeSum = 0;
+  var adherent = 0;
+  for (final day in logged) {
+    intakeSum += day.intakeKcal;
+    if (day.sodiumMg <= dailySodiumTargetMg) {
+      adherent++;
+    }
+  }
+  final int n = logged.length;
+
+  if (profile == null) {
+    return PeriodSummaryNoProfile(
+      days: days,
+      loggedDays: n,
+      adherentDays: adherent,
+      totalIntakeKcal: intakeSum,
+    );
+  }
+
+  final EnergyBudget base = _requireBudget(
+    computeEnergyBudget(profile: profile, intakeKcal: 0, today: today),
+  );
+  var burnSum = 0;
+  var balanceSum = 0;
+  for (final day in logged) {
+    final EnergyBudget budget = _requireBudget(
+      computeEnergyBudget(
+        profile: profile,
+        intakeKcal: day.intakeKcal,
+        exerciseKcal: day.exerciseKcal,
+        today: today,
+      ),
+    );
+    burnSum += budget.budgetKcal;
+    balanceSum += budget.energyBalanceKcal;
+  }
+  return PeriodSummaryReady(
+    PeriodSummary(
+      days: days,
+      baseBudgetKcal: base.baseBudgetKcal,
+      loggedDays: n,
+      adherentDays: adherent,
+      totalIntakeKcal: intakeSum,
+      totalBurnKcal: burnSum,
+      totalBalanceKcal: balanceSum,
+    ),
+  );
+}
+
+/// Unwraps the engine result; a non-null profile can never be incomplete.
+EnergyBudget _requireBudget(EnergyBudgetResult result) => switch (result) {
+  final EnergyBudget budget => budget,
+  ProfileIncomplete() => throw StateError(
+    'computeEnergyBudget returned ProfileIncomplete for a non-null profile',
+  ),
+};
