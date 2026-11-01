@@ -14,3 +14,4 @@ export 'food_serving.dart';
 export 'meal.dart';
 export 'meal_item.dart';
 export 'user_profile.dart';
+export 'weight_entry.dart';

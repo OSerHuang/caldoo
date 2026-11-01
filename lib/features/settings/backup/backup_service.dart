@@ -26,6 +26,7 @@ import 'package:caldoo/domain/models/daily_exercise.dart';
 import 'package:caldoo/domain/models/food.dart';
 import 'package:caldoo/domain/models/meal_item.dart';
 import 'package:caldoo/domain/models/user_profile.dart';
+import 'package:caldoo/domain/models/weight_entry.dart';
 
 import 'backup_codec.dart';
 import 'backup_data.dart';
@@ -74,6 +75,12 @@ class BackupService {
         dailyExerciseFromRow(row),
     ];
 
+    final List<WeightEntry> weightEntries = <WeightEntry>[
+      for (final WeightEntryRow row
+          in await _db.select(_db.weightEntries).get())
+        weightEntryFromRow(row),
+    ];
+
     final Map<String, String> settings = <String, String>{
       for (final AppSetting row in await _db.appSettingsDao.getAll())
         if (!backupExcludedSettingsKeys.contains(row.key)) row.key: row.value,
@@ -84,6 +91,7 @@ class BackupService {
       foods: foods,
       meals: meals,
       dailyExercises: dailyExercises,
+      weightEntries: weightEntries,
       settings: settings,
     );
   }
@@ -179,6 +187,25 @@ class BackupService {
         }
       }
 
+      // --- weight entries ---------------------------------------------------
+      // Same additive-by-day policy as the exercises. The restore deliberately
+      // writes the history rows only — it does NOT sync the profile's weight
+      // the way DriftWeightRepository.saveWeight does: an import must never
+      // quietly move the BMR input the way a user recording a weight does.
+      int weightEntriesImported = 0;
+      int weightEntriesSkipped = 0;
+      for (final WeightEntry entry in data.weightEntries) {
+        if (await _db.weightDao.getDay(entry.dayKey) != null) {
+          weightEntriesSkipped++;
+        } else {
+          await _db.weightDao.upsertWeight(
+            dayKey: entry.dayKey,
+            weightKg: entry.weightKg,
+          );
+          weightEntriesImported++;
+        }
+      }
+
       // --- settings ---------------------------------------------------------
       int settingsImported = 0;
       int settingsSkipped = 0;
@@ -205,6 +232,8 @@ class BackupService {
         mealItemsSkipped: mealItemsSkipped,
         dailyExercisesImported: dailyExercisesImported,
         dailyExercisesSkipped: dailyExercisesSkipped,
+        weightEntriesImported: weightEntriesImported,
+        weightEntriesSkipped: weightEntriesSkipped,
         settingsImported: settingsImported,
         settingsSkipped: settingsSkipped,
       );

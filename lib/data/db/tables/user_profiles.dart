@@ -40,6 +40,13 @@ class UserProfiles extends Table {
   /// is integer-only, so this is an INTEGER column.
   IntColumn get bmrKcalOverride => integer().nullable()();
 
+  /// User-set daily energy goal in **whole kcal/day**, or `NULL` when no goal
+  /// is set (the budget then stays "maintain": the resolved BMR).
+  ///
+  /// Same contract as [bmrKcalOverride]: an explicit number the user picked,
+  /// stored as INTEGER; `NULL` reads as "no goal", never as 0.
+  IntColumn get dailyKcalGoalOverride => integer().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 

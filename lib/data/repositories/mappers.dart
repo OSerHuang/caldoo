@@ -23,6 +23,7 @@ UserProfile userProfileFromRow(UserProfileRow row) => UserProfile(
   heightCm: row.heightCm,
   weightKg: row.weightKg,
   bmrKcalOverride: row.bmrKcalOverride,
+  dailyKcalGoalOverride: row.dailyKcalGoalOverride,
 );
 
 /// Maps a saved food, preserving blank nutrients as `null` (energy is a whole
@@ -86,6 +87,16 @@ DailyExercise dailyExerciseFromRow(DailyExerciseRow row) {
   return DailyExercise(
     dayKey: DateTime.utc(utc.year, utc.month, utc.day),
     kcal: row.kcal,
+  );
+}
+
+/// Maps the one-per-day body weight (same date-key trick as
+/// [dailyExerciseFromRow]).
+WeightEntry weightEntryFromRow(WeightEntryRow row) {
+  final DateTime utc = row.dayKey.toUtc();
+  return WeightEntry(
+    dayKey: DateTime.utc(utc.year, utc.month, utc.day),
+    weightKg: row.weightKg,
   );
 }
 

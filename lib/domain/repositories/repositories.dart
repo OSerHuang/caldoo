@@ -10,3 +10,4 @@ export 'daily_exercise_repository.dart';
 export 'food_repository.dart';
 export 'meal_repository.dart';
 export 'profile_repository.dart';
+export 'weight_repository.dart';

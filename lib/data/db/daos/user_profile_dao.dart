@@ -35,12 +35,15 @@ class UserProfileDao extends DatabaseAccessor<AppDatabase>
   ///
   /// [bmrKcalOverride] is stored verbatim; `null` lets the engine derive the
   /// basal metabolic rate with Mifflin-St Jeor from the anthropometrics.
+  /// [dailyKcalGoalOverride] is stored verbatim too; `null` means "no goal"
+  /// (the budget stays the resolved BMR).
   Future<void> saveProfile({
     required Sex sex,
     required DateTime birthDate,
     required double heightCm,
     required double weightKg,
     int? bmrKcalOverride,
+    int? dailyKcalGoalOverride,
   }) {
     return into(userProfiles).insertOnConflictUpdate(
       UserProfilesCompanion.insert(
@@ -50,6 +53,7 @@ class UserProfileDao extends DatabaseAccessor<AppDatabase>
         heightCm: heightCm,
         weightKg: weightKg,
         bmrKcalOverride: Value<int?>(bmrKcalOverride),
+        dailyKcalGoalOverride: Value<int?>(dailyKcalGoalOverride),
       ),
     );
   }

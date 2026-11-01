@@ -283,6 +283,16 @@ class $UserProfilesTable extends UserProfiles
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _dailyKcalGoalOverrideMeta =
+      const VerificationMeta('dailyKcalGoalOverride');
+  @override
+  late final GeneratedColumn<int> dailyKcalGoalOverride = GeneratedColumn<int>(
+    'daily_kcal_goal_override',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -291,6 +301,7 @@ class $UserProfilesTable extends UserProfiles
     heightCm,
     weightKg,
     bmrKcalOverride,
+    dailyKcalGoalOverride,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -340,6 +351,15 @@ class $UserProfilesTable extends UserProfiles
         ),
       );
     }
+    if (data.containsKey('daily_kcal_goal_override')) {
+      context.handle(
+        _dailyKcalGoalOverrideMeta,
+        dailyKcalGoalOverride.isAcceptableOrUnknown(
+          data['daily_kcal_goal_override']!,
+          _dailyKcalGoalOverrideMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -374,6 +394,10 @@ class $UserProfilesTable extends UserProfiles
       bmrKcalOverride: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}bmr_kcal_override'],
+      ),
+      dailyKcalGoalOverride: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}daily_kcal_goal_override'],
       ),
     );
   }
@@ -412,6 +436,13 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
   /// above. A user who knows their own BMR can pin it here and it wins. Energy
   /// is integer-only, so this is an INTEGER column.
   final int? bmrKcalOverride;
+
+  /// User-set daily energy goal in **whole kcal/day**, or `NULL` when no goal
+  /// is set (the budget then stays "maintain": the resolved BMR).
+  ///
+  /// Same contract as [bmrKcalOverride]: an explicit number the user picked,
+  /// stored as INTEGER; `NULL` reads as "no goal", never as 0.
+  final int? dailyKcalGoalOverride;
   const UserProfileRow({
     required this.id,
     required this.sex,
@@ -419,6 +450,7 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
     required this.heightCm,
     required this.weightKg,
     this.bmrKcalOverride,
+    this.dailyKcalGoalOverride,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -435,6 +467,9 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
     if (!nullToAbsent || bmrKcalOverride != null) {
       map['bmr_kcal_override'] = Variable<int>(bmrKcalOverride);
     }
+    if (!nullToAbsent || dailyKcalGoalOverride != null) {
+      map['daily_kcal_goal_override'] = Variable<int>(dailyKcalGoalOverride);
+    }
     return map;
   }
 
@@ -448,6 +483,9 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
       bmrKcalOverride: bmrKcalOverride == null && nullToAbsent
           ? const Value.absent()
           : Value(bmrKcalOverride),
+      dailyKcalGoalOverride: dailyKcalGoalOverride == null && nullToAbsent
+          ? const Value.absent()
+          : Value(dailyKcalGoalOverride),
     );
   }
 
@@ -465,6 +503,9 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
       heightCm: serializer.fromJson<double>(json['heightCm']),
       weightKg: serializer.fromJson<double>(json['weightKg']),
       bmrKcalOverride: serializer.fromJson<int?>(json['bmrKcalOverride']),
+      dailyKcalGoalOverride: serializer.fromJson<int?>(
+        json['dailyKcalGoalOverride'],
+      ),
     );
   }
   @override
@@ -479,6 +520,7 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
       'heightCm': serializer.toJson<double>(heightCm),
       'weightKg': serializer.toJson<double>(weightKg),
       'bmrKcalOverride': serializer.toJson<int?>(bmrKcalOverride),
+      'dailyKcalGoalOverride': serializer.toJson<int?>(dailyKcalGoalOverride),
     };
   }
 
@@ -489,6 +531,7 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
     double? heightCm,
     double? weightKg,
     Value<int?> bmrKcalOverride = const Value.absent(),
+    Value<int?> dailyKcalGoalOverride = const Value.absent(),
   }) => UserProfileRow(
     id: id ?? this.id,
     sex: sex ?? this.sex,
@@ -498,6 +541,9 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
     bmrKcalOverride: bmrKcalOverride.present
         ? bmrKcalOverride.value
         : this.bmrKcalOverride,
+    dailyKcalGoalOverride: dailyKcalGoalOverride.present
+        ? dailyKcalGoalOverride.value
+        : this.dailyKcalGoalOverride,
   );
   UserProfileRow copyWithCompanion(UserProfilesCompanion data) {
     return UserProfileRow(
@@ -509,6 +555,9 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
       bmrKcalOverride: data.bmrKcalOverride.present
           ? data.bmrKcalOverride.value
           : this.bmrKcalOverride,
+      dailyKcalGoalOverride: data.dailyKcalGoalOverride.present
+          ? data.dailyKcalGoalOverride.value
+          : this.dailyKcalGoalOverride,
     );
   }
 
@@ -520,14 +569,22 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
           ..write('birthDate: $birthDate, ')
           ..write('heightCm: $heightCm, ')
           ..write('weightKg: $weightKg, ')
-          ..write('bmrKcalOverride: $bmrKcalOverride')
+          ..write('bmrKcalOverride: $bmrKcalOverride, ')
+          ..write('dailyKcalGoalOverride: $dailyKcalGoalOverride')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, sex, birthDate, heightCm, weightKg, bmrKcalOverride);
+  int get hashCode => Object.hash(
+    id,
+    sex,
+    birthDate,
+    heightCm,
+    weightKg,
+    bmrKcalOverride,
+    dailyKcalGoalOverride,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -537,7 +594,8 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
           other.birthDate == this.birthDate &&
           other.heightCm == this.heightCm &&
           other.weightKg == this.weightKg &&
-          other.bmrKcalOverride == this.bmrKcalOverride);
+          other.bmrKcalOverride == this.bmrKcalOverride &&
+          other.dailyKcalGoalOverride == this.dailyKcalGoalOverride);
 }
 
 class UserProfilesCompanion extends UpdateCompanion<UserProfileRow> {
@@ -547,6 +605,7 @@ class UserProfilesCompanion extends UpdateCompanion<UserProfileRow> {
   final Value<double> heightCm;
   final Value<double> weightKg;
   final Value<int?> bmrKcalOverride;
+  final Value<int?> dailyKcalGoalOverride;
   const UserProfilesCompanion({
     this.id = const Value.absent(),
     this.sex = const Value.absent(),
@@ -554,6 +613,7 @@ class UserProfilesCompanion extends UpdateCompanion<UserProfileRow> {
     this.heightCm = const Value.absent(),
     this.weightKg = const Value.absent(),
     this.bmrKcalOverride = const Value.absent(),
+    this.dailyKcalGoalOverride = const Value.absent(),
   });
   UserProfilesCompanion.insert({
     this.id = const Value.absent(),
@@ -562,6 +622,7 @@ class UserProfilesCompanion extends UpdateCompanion<UserProfileRow> {
     required double heightCm,
     required double weightKg,
     this.bmrKcalOverride = const Value.absent(),
+    this.dailyKcalGoalOverride = const Value.absent(),
   }) : sex = Value(sex),
        birthDate = Value(birthDate),
        heightCm = Value(heightCm),
@@ -573,6 +634,7 @@ class UserProfilesCompanion extends UpdateCompanion<UserProfileRow> {
     Expression<double>? heightCm,
     Expression<double>? weightKg,
     Expression<int>? bmrKcalOverride,
+    Expression<int>? dailyKcalGoalOverride,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -581,6 +643,8 @@ class UserProfilesCompanion extends UpdateCompanion<UserProfileRow> {
       if (heightCm != null) 'height_cm': heightCm,
       if (weightKg != null) 'weight_kg': weightKg,
       if (bmrKcalOverride != null) 'bmr_kcal_override': bmrKcalOverride,
+      if (dailyKcalGoalOverride != null)
+        'daily_kcal_goal_override': dailyKcalGoalOverride,
     });
   }
 
@@ -591,6 +655,7 @@ class UserProfilesCompanion extends UpdateCompanion<UserProfileRow> {
     Value<double>? heightCm,
     Value<double>? weightKg,
     Value<int?>? bmrKcalOverride,
+    Value<int?>? dailyKcalGoalOverride,
   }) {
     return UserProfilesCompanion(
       id: id ?? this.id,
@@ -599,6 +664,8 @@ class UserProfilesCompanion extends UpdateCompanion<UserProfileRow> {
       heightCm: heightCm ?? this.heightCm,
       weightKg: weightKg ?? this.weightKg,
       bmrKcalOverride: bmrKcalOverride ?? this.bmrKcalOverride,
+      dailyKcalGoalOverride:
+          dailyKcalGoalOverride ?? this.dailyKcalGoalOverride,
     );
   }
 
@@ -625,6 +692,11 @@ class UserProfilesCompanion extends UpdateCompanion<UserProfileRow> {
     if (bmrKcalOverride.present) {
       map['bmr_kcal_override'] = Variable<int>(bmrKcalOverride.value);
     }
+    if (dailyKcalGoalOverride.present) {
+      map['daily_kcal_goal_override'] = Variable<int>(
+        dailyKcalGoalOverride.value,
+      );
+    }
     return map;
   }
 
@@ -636,7 +708,8 @@ class UserProfilesCompanion extends UpdateCompanion<UserProfileRow> {
           ..write('birthDate: $birthDate, ')
           ..write('heightCm: $heightCm, ')
           ..write('weightKg: $weightKg, ')
-          ..write('bmrKcalOverride: $bmrKcalOverride')
+          ..write('bmrKcalOverride: $bmrKcalOverride, ')
+          ..write('dailyKcalGoalOverride: $dailyKcalGoalOverride')
           ..write(')'))
         .toString();
   }
@@ -2945,6 +3018,225 @@ class DailyExercisesCompanion extends UpdateCompanion<DailyExerciseRow> {
   }
 }
 
+class $WeightEntriesTable extends WeightEntries
+    with TableInfo<$WeightEntriesTable, WeightEntryRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $WeightEntriesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _dayKeyMeta = const VerificationMeta('dayKey');
+  @override
+  late final GeneratedColumn<DateTime> dayKey = GeneratedColumn<DateTime>(
+    'day_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _weightKgMeta = const VerificationMeta(
+    'weightKg',
+  );
+  @override
+  late final GeneratedColumn<double> weightKg = GeneratedColumn<double>(
+    'weight_kg',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [dayKey, weightKg];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'weight_entries';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<WeightEntryRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('day_key')) {
+      context.handle(
+        _dayKeyMeta,
+        dayKey.isAcceptableOrUnknown(data['day_key']!, _dayKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_dayKeyMeta);
+    }
+    if (data.containsKey('weight_kg')) {
+      context.handle(
+        _weightKgMeta,
+        weightKg.isAcceptableOrUnknown(data['weight_kg']!, _weightKgMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_weightKgMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {dayKey};
+  @override
+  WeightEntryRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return WeightEntryRow(
+      dayKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}day_key'],
+      )!,
+      weightKg: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}weight_kg'],
+      )!,
+    );
+  }
+
+  @override
+  $WeightEntriesTable createAlias(String alias) {
+    return $WeightEntriesTable(attachedDatabase, alias);
+  }
+}
+
+class WeightEntryRow extends DataClass implements Insertable<WeightEntryRow> {
+  /// Date-only local-day key; one row per day.
+  final DateTime dayKey;
+
+  /// Body weight in kilograms (positive; up to two decimals).
+  final double weightKg;
+  const WeightEntryRow({required this.dayKey, required this.weightKg});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['day_key'] = Variable<DateTime>(dayKey);
+    map['weight_kg'] = Variable<double>(weightKg);
+    return map;
+  }
+
+  WeightEntriesCompanion toCompanion(bool nullToAbsent) {
+    return WeightEntriesCompanion(
+      dayKey: Value(dayKey),
+      weightKg: Value(weightKg),
+    );
+  }
+
+  factory WeightEntryRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return WeightEntryRow(
+      dayKey: serializer.fromJson<DateTime>(json['dayKey']),
+      weightKg: serializer.fromJson<double>(json['weightKg']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'dayKey': serializer.toJson<DateTime>(dayKey),
+      'weightKg': serializer.toJson<double>(weightKg),
+    };
+  }
+
+  WeightEntryRow copyWith({DateTime? dayKey, double? weightKg}) =>
+      WeightEntryRow(
+        dayKey: dayKey ?? this.dayKey,
+        weightKg: weightKg ?? this.weightKg,
+      );
+  WeightEntryRow copyWithCompanion(WeightEntriesCompanion data) {
+    return WeightEntryRow(
+      dayKey: data.dayKey.present ? data.dayKey.value : this.dayKey,
+      weightKg: data.weightKg.present ? data.weightKg.value : this.weightKg,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WeightEntryRow(')
+          ..write('dayKey: $dayKey, ')
+          ..write('weightKg: $weightKg')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(dayKey, weightKg);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is WeightEntryRow &&
+          other.dayKey == this.dayKey &&
+          other.weightKg == this.weightKg);
+}
+
+class WeightEntriesCompanion extends UpdateCompanion<WeightEntryRow> {
+  final Value<DateTime> dayKey;
+  final Value<double> weightKg;
+  final Value<int> rowid;
+  const WeightEntriesCompanion({
+    this.dayKey = const Value.absent(),
+    this.weightKg = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  WeightEntriesCompanion.insert({
+    required DateTime dayKey,
+    required double weightKg,
+    this.rowid = const Value.absent(),
+  }) : dayKey = Value(dayKey),
+       weightKg = Value(weightKg);
+  static Insertable<WeightEntryRow> custom({
+    Expression<DateTime>? dayKey,
+    Expression<double>? weightKg,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (dayKey != null) 'day_key': dayKey,
+      if (weightKg != null) 'weight_kg': weightKg,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  WeightEntriesCompanion copyWith({
+    Value<DateTime>? dayKey,
+    Value<double>? weightKg,
+    Value<int>? rowid,
+  }) {
+    return WeightEntriesCompanion(
+      dayKey: dayKey ?? this.dayKey,
+      weightKg: weightKg ?? this.weightKg,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (dayKey.present) {
+      map['day_key'] = Variable<DateTime>(dayKey.value);
+    }
+    if (weightKg.present) {
+      map['weight_kg'] = Variable<double>(weightKg.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WeightEntriesCompanion(')
+          ..write('dayKey: $dayKey, ')
+          ..write('weightKg: $weightKg, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -2954,12 +3246,14 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $MealsTable meals = $MealsTable(this);
   late final $MealItemsTable mealItems = $MealItemsTable(this);
   late final $DailyExercisesTable dailyExercises = $DailyExercisesTable(this);
+  late final $WeightEntriesTable weightEntries = $WeightEntriesTable(this);
   late final UserProfileDao userProfileDao = UserProfileDao(
     this as AppDatabase,
   );
   late final FoodDao foodDao = FoodDao(this as AppDatabase);
   late final MealDao mealDao = MealDao(this as AppDatabase);
   late final ExerciseDao exerciseDao = ExerciseDao(this as AppDatabase);
+  late final WeightDao weightDao = WeightDao(this as AppDatabase);
   late final AppSettingsDao appSettingsDao = AppSettingsDao(
     this as AppDatabase,
   );
@@ -2974,6 +3268,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     meals,
     mealItems,
     dailyExercises,
+    weightEntries,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -3142,6 +3437,7 @@ typedef $$UserProfilesTableCreateCompanionBuilder =
       required double heightCm,
       required double weightKg,
       Value<int?> bmrKcalOverride,
+      Value<int?> dailyKcalGoalOverride,
     });
 typedef $$UserProfilesTableUpdateCompanionBuilder =
     UserProfilesCompanion Function({
@@ -3151,6 +3447,7 @@ typedef $$UserProfilesTableUpdateCompanionBuilder =
       Value<double> heightCm,
       Value<double> weightKg,
       Value<int?> bmrKcalOverride,
+      Value<int?> dailyKcalGoalOverride,
     });
 
 class $$UserProfilesTableFilterComposer
@@ -3190,6 +3487,11 @@ class $$UserProfilesTableFilterComposer
 
   ColumnFilters<int> get bmrKcalOverride => $composableBuilder(
     column: $table.bmrKcalOverride,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get dailyKcalGoalOverride => $composableBuilder(
+    column: $table.dailyKcalGoalOverride,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -3232,6 +3534,11 @@ class $$UserProfilesTableOrderingComposer
     column: $table.bmrKcalOverride,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get dailyKcalGoalOverride => $composableBuilder(
+    column: $table.dailyKcalGoalOverride,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$UserProfilesTableAnnotationComposer
@@ -3260,6 +3567,11 @@ class $$UserProfilesTableAnnotationComposer
 
   GeneratedColumn<int> get bmrKcalOverride => $composableBuilder(
     column: $table.bmrKcalOverride,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get dailyKcalGoalOverride => $composableBuilder(
+    column: $table.dailyKcalGoalOverride,
     builder: (column) => column,
   );
 }
@@ -3301,6 +3613,7 @@ class $$UserProfilesTableTableManager
                 Value<double> heightCm = const Value.absent(),
                 Value<double> weightKg = const Value.absent(),
                 Value<int?> bmrKcalOverride = const Value.absent(),
+                Value<int?> dailyKcalGoalOverride = const Value.absent(),
               }) => UserProfilesCompanion(
                 id: id,
                 sex: sex,
@@ -3308,6 +3621,7 @@ class $$UserProfilesTableTableManager
                 heightCm: heightCm,
                 weightKg: weightKg,
                 bmrKcalOverride: bmrKcalOverride,
+                dailyKcalGoalOverride: dailyKcalGoalOverride,
               ),
           createCompanionCallback:
               ({
@@ -3317,6 +3631,7 @@ class $$UserProfilesTableTableManager
                 required double heightCm,
                 required double weightKg,
                 Value<int?> bmrKcalOverride = const Value.absent(),
+                Value<int?> dailyKcalGoalOverride = const Value.absent(),
               }) => UserProfilesCompanion.insert(
                 id: id,
                 sex: sex,
@@ -3324,6 +3639,7 @@ class $$UserProfilesTableTableManager
                 heightCm: heightCm,
                 weightKg: weightKg,
                 bmrKcalOverride: bmrKcalOverride,
+                dailyKcalGoalOverride: dailyKcalGoalOverride,
               ),
           withReferenceMapper: (p0) => p0
               .map(
@@ -4694,6 +5010,158 @@ typedef $$DailyExercisesTableProcessedTableManager =
       DailyExerciseRow,
       PrefetchHooks Function()
     >;
+typedef $$WeightEntriesTableCreateCompanionBuilder =
+    WeightEntriesCompanion Function({
+      required DateTime dayKey,
+      required double weightKg,
+      Value<int> rowid,
+    });
+typedef $$WeightEntriesTableUpdateCompanionBuilder =
+    WeightEntriesCompanion Function({
+      Value<DateTime> dayKey,
+      Value<double> weightKg,
+      Value<int> rowid,
+    });
+
+class $$WeightEntriesTableFilterComposer
+    extends Composer<_$AppDatabase, $WeightEntriesTable> {
+  $$WeightEntriesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<DateTime> get dayKey => $composableBuilder(
+    column: $table.dayKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get weightKg => $composableBuilder(
+    column: $table.weightKg,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$WeightEntriesTableOrderingComposer
+    extends Composer<_$AppDatabase, $WeightEntriesTable> {
+  $$WeightEntriesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<DateTime> get dayKey => $composableBuilder(
+    column: $table.dayKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get weightKg => $composableBuilder(
+    column: $table.weightKg,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$WeightEntriesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $WeightEntriesTable> {
+  $$WeightEntriesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<DateTime> get dayKey =>
+      $composableBuilder(column: $table.dayKey, builder: (column) => column);
+
+  GeneratedColumn<double> get weightKg =>
+      $composableBuilder(column: $table.weightKg, builder: (column) => column);
+}
+
+class $$WeightEntriesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $WeightEntriesTable,
+          WeightEntryRow,
+          $$WeightEntriesTableFilterComposer,
+          $$WeightEntriesTableOrderingComposer,
+          $$WeightEntriesTableAnnotationComposer,
+          $$WeightEntriesTableCreateCompanionBuilder,
+          $$WeightEntriesTableUpdateCompanionBuilder,
+          (
+            WeightEntryRow,
+            BaseReferences<_$AppDatabase, $WeightEntriesTable, WeightEntryRow>,
+          ),
+          WeightEntryRow,
+          PrefetchHooks Function()
+        > {
+  $$WeightEntriesTableTableManager(_$AppDatabase db, $WeightEntriesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$WeightEntriesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$WeightEntriesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$WeightEntriesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<DateTime> dayKey = const Value.absent(),
+                Value<double> weightKg = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => WeightEntriesCompanion(
+                dayKey: dayKey,
+                weightKg: weightKg,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required DateTime dayKey,
+                required double weightKg,
+                Value<int> rowid = const Value.absent(),
+              }) => WeightEntriesCompanion.insert(
+                dayKey: dayKey,
+                weightKg: weightKg,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$WeightEntriesTable, WeightEntryRow>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $WeightEntriesTable,
+                    WeightEntryRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$WeightEntriesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $WeightEntriesTable,
+      WeightEntryRow,
+      $$WeightEntriesTableFilterComposer,
+      $$WeightEntriesTableOrderingComposer,
+      $$WeightEntriesTableAnnotationComposer,
+      $$WeightEntriesTableCreateCompanionBuilder,
+      $$WeightEntriesTableUpdateCompanionBuilder,
+      (
+        WeightEntryRow,
+        BaseReferences<_$AppDatabase, $WeightEntriesTable, WeightEntryRow>,
+      ),
+      WeightEntryRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -4710,4 +5178,6 @@ class $AppDatabaseManager {
       $$MealItemsTableTableManager(_db, _db.mealItems);
   $$DailyExercisesTableTableManager get dailyExercises =>
       $$DailyExercisesTableTableManager(_db, _db.dailyExercises);
+  $$WeightEntriesTableTableManager get weightEntries =>
+      $$WeightEntriesTableTableManager(_db, _db.weightEntries);
 }

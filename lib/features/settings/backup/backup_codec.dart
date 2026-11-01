@@ -14,6 +14,7 @@ import 'package:caldoo/domain/models/food.dart';
 import 'package:caldoo/domain/models/meal.dart';
 import 'package:caldoo/domain/models/meal_item.dart';
 import 'package:caldoo/domain/models/user_profile.dart';
+import 'package:caldoo/domain/models/weight_entry.dart';
 import 'package:caldoo/domain/services/label_priority.dart'
     show migrateLegacyNotes;
 
@@ -50,6 +51,9 @@ String encodeBackup(BackupData data) {
     'dailyExercises': <Object?>[
       for (final DailyExercise exercise in data.dailyExercises)
         exercise.toJson(),
+    ],
+    'weightEntries': <Object?>[
+      for (final WeightEntry entry in data.weightEntries) entry.toJson(),
     ],
     'settings': settings,
   };
@@ -111,6 +115,11 @@ BackupData decodeBackup(String source, {required DateTime now}) {
         root['dailyExercises'],
         'dailyExercises',
         DailyExercise.fromJson,
+      ),
+      weightEntries: _decodeList<WeightEntry>(
+        root['weightEntries'],
+        'weightEntries',
+        WeightEntry.fromJson,
       ),
       settings: _decodeSettings(root['settings']),
     );

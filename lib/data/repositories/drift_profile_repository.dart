@@ -27,6 +27,7 @@ class DriftProfileRepository implements ProfileRepository {
       heightCm: profile.heightCm,
       weightKg: profile.weightKg,
       bmrKcalOverride: profile.bmrKcalOverride,
+      dailyKcalGoalOverride: profile.dailyKcalGoalOverride,
     );
   }
 

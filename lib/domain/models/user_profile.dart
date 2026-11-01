@@ -51,6 +51,7 @@ class UserProfile {
     required this.heightCm,
     required this.weightKg,
     this.bmrKcalOverride,
+    this.dailyKcalGoalOverride,
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) =>
@@ -80,6 +81,17 @@ class UserProfile {
   @JsonKey(fromJson: nullableKcalFromJson)
   final int? bmrKcalOverride;
 
+  /// User-set **daily energy goal** in whole kcal/day, or `null` when no goal
+  /// is set (the daily budget then stays "maintain": the resolved BMR).
+  ///
+  /// An explicit number the user picked — never a hidden factor: the energy
+  /// engine uses it as the exercise-free daily baseline instead of the BMR, so
+  /// `budget = goal + exercise` while a goal is set. Like [bmrKcalOverride],
+  /// energy is integer-only and a legacy fractional value is rounded at the
+  /// JSON boundary by [nullableKcalFromJson].
+  @JsonKey(fromJson: nullableKcalFromJson)
+  final int? dailyKcalGoalOverride;
+
   /// Whole years of age on [today] — see [ageOnBirthday].
   int ageOn(DateTime today) => ageOnBirthday(birthDate, today);
 
@@ -87,16 +99,19 @@ class UserProfile {
 
   /// Copies the profile, editing only the requested fields.
   ///
-  /// [bmrKcalOverride] is nullable, so passing it cannot express "clear the
-  /// override": use [clearBmrKcalOverride] for that (mirrors the "blank stays
-  /// blank" rule used across the models).
+  /// [bmrKcalOverride] and [dailyKcalGoalOverride] are nullable, so passing
+  /// them cannot express "clear the value": use [clearBmrKcalOverride] /
+  /// [clearDailyKcalGoalOverride] for that (mirrors the "blank stays blank"
+  /// rule used across the models).
   UserProfile copyWith({
     Sex? sex,
     DateTime? birthDate,
     double? heightCm,
     double? weightKg,
     int? bmrKcalOverride,
+    int? dailyKcalGoalOverride,
     bool clearBmrKcalOverride = false,
+    bool clearDailyKcalGoalOverride = false,
   }) {
     return UserProfile(
       sex: sex ?? this.sex,
@@ -106,6 +121,9 @@ class UserProfile {
       bmrKcalOverride: clearBmrKcalOverride
           ? null
           : (bmrKcalOverride ?? this.bmrKcalOverride),
+      dailyKcalGoalOverride: clearDailyKcalGoalOverride
+          ? null
+          : (dailyKcalGoalOverride ?? this.dailyKcalGoalOverride),
     );
   }
 
@@ -117,10 +135,17 @@ class UserProfile {
             other.birthDate == birthDate &&
             other.heightCm == heightCm &&
             other.weightKg == weightKg &&
-            other.bmrKcalOverride == bmrKcalOverride;
+            other.bmrKcalOverride == bmrKcalOverride &&
+            other.dailyKcalGoalOverride == dailyKcalGoalOverride;
   }
 
   @override
-  int get hashCode =>
-      Object.hash(sex, birthDate, heightCm, weightKg, bmrKcalOverride);
+  int get hashCode => Object.hash(
+    sex,
+    birthDate,
+    heightCm,
+    weightKg,
+    bmrKcalOverride,
+    dailyKcalGoalOverride,
+  );
 }

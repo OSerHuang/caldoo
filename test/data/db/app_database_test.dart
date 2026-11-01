@@ -21,8 +21,8 @@ void main() {
   });
 
   group('AppDatabase', () {
-    test('is schema version 10', () {
-      expect(db.schemaVersion, 10);
+    test('is schema version 11', () {
+      expect(db.schemaVersion, 11);
     });
 
     test('app_settings insert then read back the exact value', () async {

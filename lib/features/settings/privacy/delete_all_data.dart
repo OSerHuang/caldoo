@@ -37,6 +37,7 @@ class LocalDataWiper {
       await db.delete(db.mealItems).go();
       await db.delete(db.meals).go();
       await db.delete(db.dailyExercises).go();
+      await db.delete(db.weightEntries).go();
       await db.delete(db.foods).go();
       await db.delete(db.userProfiles).go();
       await db.delete(db.appSettings).go();

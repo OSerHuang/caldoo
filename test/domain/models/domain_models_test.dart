@@ -11,15 +11,20 @@ void main() {
       bmrKcalOverride: 1721,
     );
 
-    test('exposes exactly sex/birthDate/heightCm/weightKg/bmrKcalOverride', () {
-      expect(profile.toJson().keys.toSet(), <String>{
-        'sex',
-        'birthDate',
-        'heightCm',
-        'weightKg',
-        'bmrKcalOverride',
-      });
-    });
+    test(
+      'exposes exactly sex/birthDate/heightCm/weightKg/bmrKcalOverride/'
+      'dailyKcalGoalOverride',
+      () {
+        expect(profile.toJson().keys.toSet(), <String>{
+          'sex',
+          'birthDate',
+          'heightCm',
+          'weightKg',
+          'bmrKcalOverride',
+          'dailyKcalGoalOverride',
+        });
+      },
+    );
 
     test('json round-trip preserves equality and the birthday', () {
       final decoded = UserProfile.fromJson(profile.toJson());

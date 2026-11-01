@@ -20,6 +20,10 @@ UserProfile _$UserProfileFromJson(Map<String, dynamic> json) =>
           'bmrKcalOverride',
           (v) => nullableKcalFromJson(v),
         ),
+        dailyKcalGoalOverride: $checkedConvert(
+          'dailyKcalGoalOverride',
+          (v) => nullableKcalFromJson(v),
+        ),
       );
       return val;
     });
@@ -31,6 +35,7 @@ Map<String, dynamic> _$UserProfileToJson(UserProfile instance) =>
       'heightCm': instance.heightCm,
       'weightKg': instance.weightKg,
       'bmrKcalOverride': instance.bmrKcalOverride,
+      'dailyKcalGoalOverride': instance.dailyKcalGoalOverride,
     };
 
 const _$SexEnumMap = {Sex.male: 'male', Sex.female: 'female'};

@@ -381,4 +381,71 @@ void main() {
       );
     });
   });
+
+  group('daily goal: the baseline is the goal when one is set', () {
+    final goalProfile = _male30.copyWith(dailyKcalGoalOverride: 1250);
+
+    test('baseBudget == goal, NOT the BMR', () {
+      final budget = _budgetOf(
+        computeEnergyBudget(
+          profile: goalProfile,
+          intakeKcal: 1000,
+          today: _today,
+        ),
+      );
+      expect(budget.goalKcal, 1250);
+      expect(budget.baseBudgetKcal, 1250);
+      expect(
+        budget.budgetKcal,
+        1250,
+        reason: 'no exercise: budget is the goal',
+      );
+      // The BMR stays resolved and untouched for display elsewhere.
+      expect(budget.bmrKcal, 1649);
+    });
+
+    test('exercise is added on top of the goal', () {
+      final budget = _budgetOf(
+        computeEnergyBudget(
+          profile: goalProfile,
+          intakeKcal: 1400,
+          exerciseKcal: 220,
+          today: _today,
+        ),
+      );
+      expect(budget.budgetKcal, 1470);
+      expect(budget.deficitKcal, 70);
+    });
+
+    test(
+      'no goal: behaviour is exactly the maintain budget (null goalKcal)',
+      () {
+        final budget = _budgetOf(
+          computeEnergyBudget(
+            profile: _male30,
+            intakeKcal: 1000,
+            exerciseKcal: 100,
+            today: _today,
+          ),
+        );
+        expect(budget.goalKcal, isNull);
+        expect(budget.baseBudgetKcal, budget.bmrKcal);
+        expect(budget.budgetKcal, 1749);
+      },
+    );
+
+    test('resolveDailyGoalKcal: null passes through, non-positive throws', () {
+      expect(resolveDailyGoalKcal(_male30), isNull);
+      expect(resolveDailyGoalKcal(goalProfile), 1250);
+      for (final goal in <int>[0, -1]) {
+        expect(
+          () => resolveDailyGoalKcal(
+            _male30.copyWith(dailyKcalGoalOverride: goal),
+          ),
+          throwsArgumentError,
+          reason: 'goal=$goal',
+        );
+      }
+    });
+  });
 }

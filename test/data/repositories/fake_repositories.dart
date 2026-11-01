@@ -352,3 +352,89 @@ class FakeExerciseRepository implements DailyExerciseRepository {
     return list;
   }
 }
+
+/// In-memory [WeightRepository] over a `dayKey -> WeightEntry` map.
+///
+/// Mirrors the Drift implementation's observable semantics: the save contract
+/// syncs the paired [FakeProfileRepository]'s weight when one was attached (the
+/// profile input is optional because a weight log can exist before onboarding),
+/// re-recording a day overwrites it, and deleting never rewinds the profile.
+class FakeWeightRepository implements WeightRepository {
+  /// Creates the fake; pass [profileRepo] to exercise the save-sync contract.
+  FakeWeightRepository({FakeProfileRepository? profileRepo})
+    : _profile = profileRepo;
+
+  final FakeProfileRepository? _profile;
+  final Map<DateTime, WeightEntry> _byDay = <DateTime, WeightEntry>{};
+  final StreamController<void> _changes = StreamController<void>.broadcast();
+
+  @override
+  Future<void> saveWeight({
+    required DateTime dayKey,
+    required double weightKg,
+  }) async {
+    if (!weightKg.isFinite || weightKg <= 0) {
+      throw ArgumentError.value(
+        weightKg,
+        'weightKg',
+        'must be finite and positive',
+      );
+    }
+    _byDay[dayKey] = WeightEntry(dayKey: dayKey, weightKg: weightKg);
+    final UserProfile? stored = await _profile?.loadProfile();
+    if (stored != null && stored.weightKg != weightKg) {
+      await _profile!.saveProfile(stored.copyWith(weightKg: weightKg));
+    }
+    _changes.add(null);
+  }
+
+  @override
+  Future<int> deleteDay(DateTime dayKey) async {
+    final int removed = _byDay.remove(dayKey) == null ? 0 : 1;
+    if (removed > 0) {
+      _changes.add(null);
+    }
+    return removed;
+  }
+
+  @override
+  Future<WeightEntry?> getDay(DateTime dayKey) async => _byDay[dayKey];
+
+  @override
+  Stream<WeightEntry?> watchDay(DateTime dayKey) async* {
+    yield _byDay[dayKey];
+    yield* _changes.stream.map((_) => _byDay[dayKey]);
+  }
+
+  @override
+  Stream<List<WeightEntry>> watchRange({
+    required DateTime startInclusive,
+    required DateTime endExclusive,
+  }) async* {
+    yield _inRange(startInclusive, endExclusive);
+    yield* _changes.stream.map((_) => _inRange(startInclusive, endExclusive));
+  }
+
+  @override
+  Stream<List<WeightEntry>> watchAll() async* {
+    yield _ordered();
+    yield* _changes.stream.map((_) => _ordered());
+  }
+
+  /// Closes the change stream; call from `tearDown`.
+  Future<void> dispose() => _changes.close();
+
+  List<WeightEntry> _inRange(DateTime startInclusive, DateTime endExclusive) {
+    return <WeightEntry>[
+      for (final WeightEntry entry in _ordered())
+        if (!entry.dayKey.isBefore(startInclusive) &&
+            entry.dayKey.isBefore(endExclusive))
+          entry,
+    ];
+  }
+
+  List<WeightEntry> _ordered() {
+    return <WeightEntry>[..._byDay.values]
+      ..sort((a, b) => a.dayKey.compareTo(b.dayKey));
+  }
+}

@@ -24,6 +24,7 @@ import 'generated/schema_v7.dart' as v7;
 import 'generated/schema_v8.dart' as v8;
 import 'generated/schema_v9.dart' as v9;
 import 'generated/schema_v10.dart' as v10;
+import 'generated/schema_v11.dart' as v11;
 
 void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
@@ -379,10 +380,10 @@ void main() {
       });
       await oldDb.close();
 
-      // Migrate all the way to the current shape (v4 -> ... -> v10), because
+      // Migrate all the way to the current shape (v4 -> ... -> v11), because
       // the DAO below always speaks the current schema.
       final db = AppDatabase.forTesting(schema.newConnection());
-      await verifier.migrateAndValidate(db, 10);
+      await verifier.migrateAndValidate(db, 11);
 
       final migrated = await db.userProfileDao.getProfile();
       expect(migrated, isNotNull);
@@ -484,7 +485,9 @@ void main() {
       await oldDb.close();
 
       final db = AppDatabase.forTesting(schema.newConnection());
-      await verifier.migrateAndValidate(db, 10);
+      // The DAO below speaks the current schema, so migrate to it (v5 -> ...
+      // -> v11): the profile DAO writes the goal column added in v11.
+      await verifier.migrateAndValidate(db, 11);
 
       final migrated = await db.userProfileDao.getProfile();
       expect(migrated, isNotNull);
@@ -878,5 +881,103 @@ void main() {
         },
       );
     });
+  });
+
+  group('v10 -> v11 goal + weight history data integrity', () {
+    // v11 is purely additive: the profile gains a nullable
+    // `daily_kcal_goal_override` (NULL reads as "no goal") and the new
+    // `weight_entries` table starts empty. Nothing else may change.
+    const int birthTs = 782611200; // 1994-10-24T00:00:00Z
+
+    test(
+      'preserves the v10 profile with a NULL goal; weight_entries starts empty',
+      () async {
+        await verifier.testWithDataIntegrity(
+          oldVersion: 10,
+          newVersion: 11,
+          createOld: v10.DatabaseAtV10.new,
+          createNew: v11.DatabaseAtV11.new,
+          openTestedDatabase: AppDatabase.forTesting,
+          createItems: (batch, oldDb) {
+            batch.insert(
+              oldDb.userProfile,
+              const v10.UserProfileData(
+                id: 0,
+                sex: 'male',
+                birthDate: birthTs,
+                heightCm: 175,
+                weightKg: 70,
+                bmrKcalOverride: 1649,
+              ),
+            );
+          },
+          validateItems: (newDb) async {
+            final profiles = await newDb.select(newDb.userProfile).get();
+            expect(profiles, hasLength(1));
+            expect(profiles.single.bmrKcalOverride, 1649);
+            // The column introduced by v11 reads as "no goal" on existing rows.
+            expect(profiles.single.dailyKcalGoalOverride, isNull);
+
+            final weights = await newDb.select(newDb.weightEntries).get();
+            expect(weights, isEmpty);
+
+            // And the new table is writable (one row per day, PK day_key).
+            await newDb
+                .into(newDb.weightEntries)
+                .insert(
+                  const v11.WeightEntriesData(
+                    dayKey: 1760000000,
+                    weightKg: 68.4,
+                  ),
+                );
+            final weights2 = await newDb.select(newDb.weightEntries).get();
+            expect(weights2, hasLength(1));
+            expect(weights2.single.weightKg, 68.4);
+          },
+        );
+      },
+    );
+
+    test(
+      'a v10 profile can adopt a goal through the DAO after migrating',
+      () async {
+        final schema = await verifier.schemaAt(10);
+        final oldDb = v10.DatabaseAtV10(schema.newConnection());
+        await oldDb.batch((batch) {
+          batch.insert(
+            oldDb.userProfile,
+            const v10.UserProfileData(
+              id: 0,
+              sex: 'male',
+              birthDate: birthTs,
+              heightCm: 175,
+              weightKg: 70,
+              bmrKcalOverride: 1649,
+            ),
+          );
+        });
+        await oldDb.close();
+
+        final db = AppDatabase.forTesting(schema.newConnection());
+        await verifier.migrateAndValidate(db, 11);
+
+        // The preserved row reads as "no goal", then the DAO upsert adopts one.
+        final row = await db.userProfileDao.getProfile();
+        expect(row!.dailyKcalGoalOverride, isNull);
+        await db.userProfileDao.saveProfile(
+          sex: Sex.male,
+          birthDate: DateTime.utc(1994, 10, 24),
+          heightCm: 175,
+          weightKg: 70,
+          bmrKcalOverride: 1649,
+          dailyKcalGoalOverride: 1250,
+        );
+        expect(
+          (await db.userProfileDao.getProfile())!.dailyKcalGoalOverride,
+          1250,
+        );
+        await db.close();
+      },
+    );
   });
 }

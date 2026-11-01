@@ -55,6 +55,11 @@ final exerciseRepositoryProvider = Provider<DailyExerciseRepository>(
   (ref) => DriftExerciseRepository(ref.watch(appDatabaseProvider)),
 );
 
+/// The `WeightRepository` port, backed by the app database.
+final weightRepositoryProvider = Provider<WeightRepository>(
+  (ref) => DriftWeightRepository(ref.watch(appDatabaseProvider)),
+);
+
 /// Non-secret key/value prefs over the Drift `app_settings` table.
 ///
 /// This is the generic lane (e.g. a future `notice_seen` flag). The AI

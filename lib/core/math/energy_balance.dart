@@ -1,24 +1,26 @@
 /// Energy engine: a basal metabolic rate (Mifflin-St Jeor, user-overridable),
-/// an exercise-free daily baseline and an explicit exercise add-back.
+/// an optional user-set daily goal, an exercise-free daily baseline and an
+/// explicit exercise add-back.
 ///
-/// ## The baseline IS the basal metabolic rate
+/// ## The baseline is the goal when one is set, else the BMR
 ///
 /// The profile stores the anthropometrics the estimate needs
-/// ([UserProfile.sex], `.birthDate`, `.heightCm`, `.weightKg`) and, optionally,
-/// the user's own [UserProfile.bmrKcalOverride]. Age is derived from the
-/// birthday on a caller-supplied `today` ([UserProfile.ageOn]), so there is no
-/// stored age to update every year. The daily baseline is that resolved BMR;
-/// logged exercise is therefore **added on top** of it:
+/// ([UserProfile.sex], `.birthDate`, `.heightCm`, `.weightKg`), an optional
+/// [UserProfile.bmrKcalOverride] and an optional
+/// [UserProfile.dailyKcalGoalOverride]. Age is derived from the birthday on a
+/// caller-supplied `today` ([UserProfile.ageOn]), so there is no stored age to
+/// update every year. The daily baseline is the user's goal when set and the
+/// resolved BMR otherwise; logged exercise is **added on top** of it:
 ///
 /// ```text
-/// baseBudget = resolveBmrKcal(profile)          // BMR, no exercise
-/// budget     = baseBudget + exerciseKcal        // exercise added back
+/// baseBudget = goal ?? resolveBmrKcal(profile)   // goal wins, else BMR
+/// budget     = baseBudget + exerciseKcal         // exercise added back
 /// ```
 ///
-/// There is deliberately **no activity multiplier**: the old NEAT-only levels
-/// were removed so the user sees (and can edit) the actual basal-metabolism
-/// number instead of picking a factor. Exercise stays a separate add-back and
-/// can never be double-counted.
+/// There is deliberately **no activity multiplier and no hidden factor**: a
+/// goal is an explicit number the user picked (the goal sheet only PRE-COMPUTES
+/// suggestions), the user sees (and can edit) the actual number, and exercise
+/// stays a separate add-back that can never be double-counted.
 ///
 /// ## Every energy number is a whole kcal integer
 ///
@@ -64,6 +66,7 @@ final class ProfileIncomplete extends EnergyBudgetResult {
 final class EnergyBudget extends EnergyBudgetResult {
   const EnergyBudget({
     required this.bmrKcal,
+    required this.goalKcal,
     required this.baseBudgetKcal,
     required this.exerciseKcal,
     required this.budgetKcal,
@@ -74,8 +77,12 @@ final class EnergyBudget extends EnergyBudgetResult {
   /// set, otherwise the rounded Mifflin-St Jeor estimate.
   final int bmrKcal;
 
-  /// Exercise-free daily baseline. With the activity multiplier gone this is
-  /// exactly [bmrKcal]; exercise is added on top in [budgetKcal].
+  /// The user's daily energy goal in whole kcal/day, or `null` when no goal is
+  /// set (the budget then means "maintain": the resolved BMR).
+  final int? goalKcal;
+
+  /// Exercise-free daily baseline: the user's goal when one is set, otherwise
+  /// exactly [bmrKcal]. Exercise is added on top in [budgetKcal].
   final int baseBudgetKcal;
 
   /// Logged exercise energy for the day, whole kcal — added back on top of
@@ -108,7 +115,7 @@ final class EnergyBudget extends EnergyBudgetResult {
 
   @override
   String toString() =>
-      'EnergyBudget(bmr: $bmrKcal, base: $baseBudgetKcal, '
+      'EnergyBudget(bmr: $bmrKcal, goal: $goalKcal, base: $baseBudgetKcal, '
       'exercise: $exerciseKcal, budget: $budgetKcal, intake: $intakeKcal, '
       'energyBalance: $energyBalanceKcal, deficit: $deficitKcal)';
 }
@@ -167,13 +174,33 @@ int resolveBmrKcal(UserProfile profile, {required DateTime today}) {
   );
 }
 
+/// Resolves the profile's daily energy goal in whole kcal/day, or `null` when
+/// no goal is set.
+///
+/// Same contract as [resolveBmrKcal]: a non-positive goal throws an
+/// [ArgumentError] — the engine never lets a malformed number poison a day
+/// total.
+int? resolveDailyGoalKcal(UserProfile profile) {
+  final int? override = profile.dailyKcalGoalOverride;
+  if (override != null && override <= 0) {
+    throw ArgumentError.value(
+      override,
+      'dailyKcalGoalOverride',
+      'must be positive',
+    );
+  }
+  return override;
+}
+
 /// Computes the full daily energy budget for [profile] on [today].
 ///
-/// `budgetKcal = resolveBmrKcal(profile, today: today) + exerciseKcal` —
-/// [exerciseKcal] is an **input** (the caller supplies the day's exercise
-/// burn); the engine never derives it and never folds it into the baseline.
-/// [today] is also the reference date the profile's age is derived on, so a
-/// birthday can never go stale.
+/// `budgetKcal = (goal ?? resolveBmrKcal(profile, today: today)) +
+/// exerciseKcal` — [exerciseKcal] is an **input** (the caller supplies the
+/// day's exercise burn); the engine never derives it and never folds it into
+/// the baseline. The goal is read from the profile
+/// ([UserProfile.dailyKcalGoalOverride]): `null` keeps the "maintain" budget
+/// (the resolved BMR). [today] is also the reference date the profile's age is
+/// derived on, so a birthday can never go stale.
 ///
 /// Returns [ProfileIncomplete] when [profile] is `null`. Negative
 /// [intakeKcal] / [exerciseKcal] throw an [ArgumentError] rather than poisoning
@@ -190,11 +217,13 @@ EnergyBudgetResult computeEnergyBudget({
     return const ProfileIncomplete();
   }
   final int bmr = resolveBmrKcal(profile, today: today);
+  final int? goal = resolveDailyGoalKcal(profile);
   return EnergyBudget(
     bmrKcal: bmr,
-    baseBudgetKcal: bmr,
+    goalKcal: goal,
+    baseBudgetKcal: goal ?? bmr,
     exerciseKcal: exerciseKcal,
-    budgetKcal: bmr + exerciseKcal,
+    budgetKcal: (goal ?? bmr) + exerciseKcal,
     intakeKcal: intakeKcal,
   );
 }

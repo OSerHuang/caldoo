@@ -19,6 +19,7 @@ import 'package:caldoo/core/time/date_windows.dart' show MealWithItems;
 import 'package:caldoo/domain/models/daily_exercise.dart';
 import 'package:caldoo/domain/models/food.dart';
 import 'package:caldoo/domain/models/user_profile.dart';
+import 'package:caldoo/domain/models/weight_entry.dart';
 
 /// On-disk schema version stamped into every export.
 ///
@@ -38,11 +39,15 @@ import 'package:caldoo/domain/models/user_profile.dart';
 ///   `daily_exercises.kcal` and the profile's `bmrKcalOverride` are written as
 ///   whole-kcal integers. Versions 2 and 3 remain importable: their fractional
 ///   energy numbers are rounded at the JSON boundary by the model parsers.
-const int backupSchemaVersion = 4;
+/// * 5 — adds the `weightEntries` section (the one-per-day body-weight
+///   history) and the profile's `dailyKcalGoalOverride` field. Versions 2–4
+///   remain importable: a missing section decodes as empty and a missing
+///   profile field decodes as `null` (no goal).
+const int backupSchemaVersion = 5;
 
 /// Versions [decodeBackup] can still read (the current one plus the legacy
-/// age-based profile shape). Anything else is rejected outright.
-const Set<int> supportedBackupSchemaVersions = <int>{2, 3, 4};
+/// age-based profile shapes). Anything else is rejected outright.
+const Set<int> supportedBackupSchemaVersions = <int>{2, 3, 4, 5};
 
 /// `app_settings` keys that are transient UI state or device preferences, not
 /// user data.
@@ -70,6 +75,7 @@ class BackupData {
     this.foods = const <Food>[],
     this.meals = const <MealWithItems>[],
     this.dailyExercises = const <DailyExercise>[],
+    this.weightEntries = const <WeightEntry>[],
     this.settings = const <String, String>{},
   });
 
@@ -85,6 +91,9 @@ class BackupData {
   /// The one-per-day exercise-burn values.
   final List<DailyExercise> dailyExercises;
 
+  /// The one-per-day body-weight values.
+  final List<WeightEntry> weightEntries;
+
   /// Non-secret `app_settings` entries (excludes [backupExcludedSettingsKeys]).
   final Map<String, String> settings;
 
@@ -94,6 +103,7 @@ class BackupData {
       foods.isEmpty &&
       meals.isEmpty &&
       dailyExercises.isEmpty &&
+      weightEntries.isEmpty &&
       settings.isEmpty;
 
   @override
@@ -106,6 +116,7 @@ class BackupData {
         listEquals(other.foods, foods) &&
         _mealsEqual(other.meals, meals) &&
         listEquals(other.dailyExercises, dailyExercises) &&
+        listEquals(other.weightEntries, weightEntries) &&
         mapEquals(other.settings, settings);
   }
 
@@ -119,6 +130,7 @@ class BackupData {
       ),
     ),
     Object.hashAll(dailyExercises),
+    Object.hashAll(weightEntries),
     Object.hashAll(
       settings.entries.map((entry) => Object.hash(entry.key, entry.value)),
     ),
@@ -128,7 +140,7 @@ class BackupData {
   String toString() =>
       'BackupData(profile: ${profile != null}, foods: ${foods.length}, '
       'meals: ${meals.length}, dailyExercises: ${dailyExercises.length}, '
-      'settings: ${settings.length})';
+      'weightEntries: ${weightEntries.length}, settings: ${settings.length})';
 
   static bool _mealsEqual(List<MealWithItems> a, List<MealWithItems> b) {
     if (a.length != b.length) {
@@ -167,6 +179,8 @@ class ImportSummary {
     this.mealItemsSkipped = 0,
     this.dailyExercisesImported = 0,
     this.dailyExercisesSkipped = 0,
+    this.weightEntriesImported = 0,
+    this.weightEntriesSkipped = 0,
     this.settingsImported = 0,
     this.settingsSkipped = 0,
   });
@@ -191,6 +205,10 @@ class ImportSummary {
   final int dailyExercisesImported;
   final int dailyExercisesSkipped;
 
+  /// `weight_entries` counters.
+  final int weightEntriesImported;
+  final int weightEntriesSkipped;
+
   /// `app_settings` counters.
   final int settingsImported;
   final int settingsSkipped;
@@ -202,6 +220,7 @@ class ImportSummary {
       mealsImported +
       mealItemsImported +
       dailyExercisesImported +
+      weightEntriesImported +
       settingsImported;
 
   /// Rows dropped because an identical id/key already existed (or the parent
@@ -212,6 +231,7 @@ class ImportSummary {
       mealsSkipped +
       mealItemsSkipped +
       dailyExercisesSkipped +
+      weightEntriesSkipped +
       settingsSkipped;
 
   /// `true` when the file carried nothing importable.
@@ -233,6 +253,8 @@ class ImportSummary {
         other.mealItemsSkipped == mealItemsSkipped &&
         other.dailyExercisesImported == dailyExercisesImported &&
         other.dailyExercisesSkipped == dailyExercisesSkipped &&
+        other.weightEntriesImported == weightEntriesImported &&
+        other.weightEntriesSkipped == weightEntriesSkipped &&
         other.settingsImported == settingsImported &&
         other.settingsSkipped == settingsSkipped;
   }
@@ -249,6 +271,8 @@ class ImportSummary {
     mealItemsSkipped,
     dailyExercisesImported,
     dailyExercisesSkipped,
+    weightEntriesImported,
+    weightEntriesSkipped,
     settingsImported,
     settingsSkipped,
   );
@@ -261,6 +285,7 @@ class ImportSummary {
       'meals: $mealsImported/$mealsSkipped, '
       'mealItems: $mealItemsImported/$mealItemsSkipped, '
       'dailyExercises: $dailyExercisesImported/$dailyExercisesSkipped, '
+      'weightEntries: $weightEntriesImported/$weightEntriesSkipped, '
       'settings: $settingsImported/$settingsSkipped)';
 }
 

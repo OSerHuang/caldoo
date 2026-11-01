@@ -37,6 +37,7 @@ Future<void> seedEverything(AppDatabase db) async {
       heightCm: 162.5,
       weightKg: 55.25,
       bmrKcalOverride: 1311,
+      dailyKcalGoalOverride: 1200,
     ),
   );
 
@@ -129,6 +130,18 @@ Future<void> seedEverything(AppDatabase db) async {
   await exercises.setKcal(dayKey: DateTime.utc(2026, 3, 4), kcal: 220);
   await exercises.setKcal(dayKey: DateTime.utc(2026, 3, 5), kcal: 300);
 
+  // The history rows are written through the DAO (not the repository): the
+  // seed stays orthogonal to the profile-sync side of saveWeight, so the
+  // round-trip asserts the storage format, not the sync behaviour.
+  await db.weightDao.upsertWeight(
+    dayKey: DateTime.utc(2026, 3, 4),
+    weightKg: 55.1,
+  );
+  await db.weightDao.upsertWeight(
+    dayKey: DateTime.utc(2026, 3, 10),
+    weightKg: 54.7,
+  );
+
   await db.appSettingsDao.setValue(
     AiSettingsRepository.baseUrlPrefKey,
     'https://api.example.test',
@@ -179,19 +192,20 @@ void main() {
       final String payload = await sourceService.exportToJson();
       final ImportSummary summary = await targetService.importFromJson(payload);
 
-      // The export is stamped with the current (integer-energy) version.
-      expect(backupSchemaVersion, 4);
-      expect(supportedBackupSchemaVersions, <int>{2, 3, 4});
+      // The export is stamped with the current (weight-history) version.
+      expect(backupSchemaVersion, 5);
+      expect(supportedBackupSchemaVersions, <int>{2, 3, 4, 5});
       final Map<String, dynamic> exported =
           jsonDecode(payload) as Map<String, dynamic>;
-      expect(exported['schemaVersion'], 4);
+      expect(exported['schemaVersion'], 5);
 
-      // v4 writes EVERY energy value as a JSON integer: an old app reading a
-      // v4 file refuses it wholesale instead of half-parsing a fraction.
+      // v5 carries the explicit daily goal next to the BMR override.
       final Map<String, dynamic> exportedProfile =
           exported['profile'] as Map<String, dynamic>;
       expect(exportedProfile['bmrKcalOverride'], 1311);
       expect(exportedProfile['bmrKcalOverride'], isA<int>());
+      expect(exportedProfile['dailyKcalGoalOverride'], 1200);
+      expect(exportedProfile['dailyKcalGoalOverride'], isA<int>());
       final Map<String, dynamic> exportedFood =
           (exported['foods'] as List<Object?>).first as Map<String, dynamic>;
       expect(exportedFood['kcal'], 251);
@@ -231,8 +245,9 @@ void main() {
       expect(summary.mealsImported, 2);
       expect(summary.mealItemsImported, 3);
       expect(summary.dailyExercisesImported, 2);
+      expect(summary.weightEntriesImported, 2);
       expect(summary.settingsImported, 2);
-      expect(summary.totalImported, 12);
+      expect(summary.totalImported, 14);
 
       // Spot-check the nullable fields explicitly, so a broken `==` cannot
       // hide a silently-coerced null (the blank-stays-blank contract).
@@ -273,6 +288,8 @@ void main() {
       expect(actual.profile!.birthDate, DateTime.utc(1997, 3, 14));
       // The BMR override crosses the JSON round-trip verbatim (not re-derived).
       expect(actual.profile!.bmrKcalOverride, 1311);
+      // The daily goal crosses verbatim too: an explicit number, never derived.
+      expect(actual.profile!.dailyKcalGoalOverride, 1200);
       expect(
         actual.dailyExercises.map((e) => e.kcal).toList(),
         unorderedEquals(<int>[220, 300]),
@@ -280,6 +297,15 @@ void main() {
       expect(
         actual.dailyExercises.firstWhere((e) => e.kcal == 220).dayKey,
         DateTime.utc(2026, 3, 4),
+      );
+      // The weight history survives row-for-row, keys included.
+      expect(
+        actual.weightEntries.map((e) => e.weightKg).toList(),
+        unorderedEquals(<double>[55.1, 54.7]),
+      );
+      expect(
+        actual.weightEntries.firstWhere((e) => e.weightKg == 54.7).dayKey,
+        DateTime.utc(2026, 3, 10),
       );
     });
 
@@ -579,12 +605,15 @@ void main() {
 
     test('a wrong schemaVersion throws a typed error', () async {
       final BackupData before = await service.capture();
+      // A FUTURE version (never the current one) must be rejected wholesale.
+      const int wrongVersion = backupSchemaVersion + 1;
       final String payload = jsonEncode(<String, Object?>{
-        'schemaVersion': 5,
+        'schemaVersion': wrongVersion,
         'profile': null,
         'foods': <Object?>[],
         'meals': <Object?>[],
         'dailyExercises': <Object?>[],
+        'weightEntries': <Object?>[],
         'settings': <String, String>{},
       });
 
@@ -592,7 +621,7 @@ void main() {
         service.importFromJson(payload),
         throwsA(
           isA<BackupSchemaVersionException>()
-              .having((e) => e.found, 'found', 5)
+              .having((e) => e.found, 'found', wrongVersion)
               .having((e) => e.expected, 'expected', backupSchemaVersion),
         ),
       );
