@@ -212,7 +212,7 @@ void main() {
     expect(textOf(tester, dailyIntakeKcalKey), '1936');
     expect(textOf(tester, dailyExerciseKcalKey), '257');
     expect(textOf(tester, dailyBudgetKey), '2236');
-    expect(textOf(tester, dailyBalanceLabelKey), '缺口');
+    expect(textOf(tester, dailyBalanceLabelKey), '缺口(相对额度)');
     expect(textOf(tester, dailyBalanceValueKey), '300');
 
     // ---------------------------------------------------------------------
@@ -306,7 +306,7 @@ void main() {
       // The label-only deficit is base budget - label intake (same formatter
       // the widget uses), so the shortfall is correct without a photo meal.
       final int labelOnlyDeficit = expectedBaseBudgetKcal - labelMealKcal;
-      expect(textOf(tester, dailyBalanceLabelKey), '缺口');
+      expect(textOf(tester, dailyBalanceLabelKey), '缺口(相对额度)');
       expect(
         textOf(tester, dailyBalanceValueKey),
         AppFormat.number(labelOnlyDeficit),

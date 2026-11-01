@@ -30,6 +30,9 @@
 ///   exercise-varying budgets, so the line is deliberately the exercise-free
 ///   baseline; the week/month dashboards label it distinctly from the daily
 ///   dashboard's `今日额度(含运动)`.
+/// * **weight change** — the signed delta between the period's last and first
+///   weight entries (see [periodWeightDeltaKg]); `null` with fewer than two
+///   in-period entries, and profile-independent like the salt adherence.
 ///
 /// The balance/budget numbers come ONLY from the energy engine
 /// ([computeEnergyBudget]); this file never re-derives BMR or the budget.
@@ -39,10 +42,19 @@ import 'package:caldoo/core/math/energy_balance.dart';
 import 'package:caldoo/core/units/nutrition_units.dart';
 import 'package:caldoo/domain/models/day_rollup.dart';
 import 'package:caldoo/domain/models/user_profile.dart';
+import 'package:caldoo/domain/models/weight_entry.dart';
 
 /// WHO daily sodium ceiling in mg, derived from the canonical
 /// [dailySaltTargetG] (`5 g salt == 2000 mg Na`) so the two can never diverge.
 final double dailySodiumTargetMg = saltGToSodiumMg(dailySaltTargetG);
+
+/// The signed body-weight change over a period: the LAST entry in the
+/// (already period-bounded, day-ordered) list minus the FIRST.
+///
+/// `null` with fewer than two entries — a single data point has no direction,
+/// and a "0.0" from one recording would read as a measured fact.
+double? periodWeightDeltaKg(List<WeightEntry> entries) =>
+    entries.length < 2 ? null : entries.last.weightKg - entries.first.weightKg;
 
 /// One period's running (cumulative) totals.
 final class PeriodSummary {
@@ -55,16 +67,36 @@ final class PeriodSummary {
     required this.totalIntakeKcal,
     required this.totalBurnKcal,
     required this.totalBalanceKcal,
+    this.goalKcal,
+    this.goalAdherentDays = 0,
+    this.weightEntries = const <WeightEntry>[],
   });
 
   /// One rollup per day of the period, in calendar order (seven for a week,
   /// 28..31 for a month — the chart plots these in order).
   final List<DayRollup> days;
 
-  /// The exercise-free daily baseline (the resolved BMR) in **whole kcal**,
-  /// drawn as the dashed target line. Never `null`: a [PeriodSummary] only
-  /// exists for a complete profile.
+  /// The exercise-free daily baseline (the user's goal when set, else the
+  /// resolved BMR) in **whole kcal**, drawn as the dashed target line. Never
+  /// `null`: a [PeriodSummary] only exists for a complete profile.
   final int baseBudgetKcal;
+
+  /// The user's daily energy goal in whole kcal/day, or `null` when no goal is
+  /// set (the target line is then the BMR and no goal-adherence is reported).
+  final int? goalKcal;
+
+  /// How many logged days stayed at or under [goalKcal]. Only meaningful when
+  /// [goalKcal] is non-null; `0` otherwise.
+  final int goalAdherentDays;
+
+  /// The period's body-weight entries, day-ordered (already bounded to the
+  /// period window by the providers). Profile-independent; feeds the 体重
+  /// line block and its signed-change header.
+  final List<WeightEntry> weightEntries;
+
+  /// The signed body-weight change over the period (last entry minus first),
+  /// or `null` with fewer than two in-period entries.
+  double? get weightDeltaKg => periodWeightDeltaKg(weightEntries);
 
   /// How many days of the period logged at least one meal
   /// (`mealCount >= 1`).
@@ -76,7 +108,7 @@ final class PeriodSummary {
   /// Sum of the logged days' intake kcal — the period's running intake.
   final int totalIntakeKcal;
 
-  /// Sum of the logged days' budgets (`bmr + exercise`) — the period's running
+  /// Sum of the logged days' budgets (`base + exercise`) — the period's running
   /// burn. Exercise on a logged day is included; an exercise-only day is not.
   final int totalBurnKcal;
 
@@ -87,6 +119,11 @@ final class PeriodSummary {
 
   /// `adherentDays / loggedDays` (0 when there are no logged days).
   double get saltAdherence => loggedDays == 0 ? 0 : adherentDays / loggedDays;
+
+  /// `goalAdherentDays / loggedDays` (0 when there are no logged days or no
+  /// goal).
+  double get goalAdherence =>
+      loggedDays == 0 || goalKcal == null ? 0 : goalAdherentDays / loggedDays;
 
   /// `true` when the day at [index] (in calendar order) logged at least one
   /// meal.
@@ -129,6 +166,7 @@ final class PeriodSummaryNoProfile extends PeriodSummaryState {
     required this.loggedDays,
     required this.adherentDays,
     required this.totalIntakeKcal,
+    this.weightEntries = const <WeightEntry>[],
   });
 
   /// The period's rollups, in calendar order.
@@ -142,6 +180,13 @@ final class PeriodSummaryNoProfile extends PeriodSummaryState {
 
   /// Sum of the logged days' intake kcal — the period's running intake.
   final int totalIntakeKcal;
+
+  /// The period's body-weight entries (does not need the profile).
+  final List<WeightEntry> weightEntries;
+
+  /// The signed body-weight change over the period, or `null` with fewer than
+  /// two in-period entries.
+  double? get weightDeltaKg => periodWeightDeltaKg(weightEntries);
 
   /// `adherentDays / loggedDays`.
   double get saltAdherence => loggedDays == 0 ? 0 : adherentDays / loggedDays;
@@ -168,11 +213,15 @@ final class PeriodSummaryReady extends PeriodSummaryState {
 /// The totals are summed over the LOGGED days only (the same set the chart
 /// plots), so an exercise-only day never contributes to the period's running
 /// numbers. [today] is forwarded unchanged to the energy engine, which derives
-/// the profile's age from it.
+/// the profile's age from it. [weightEntries] must already be bounded to the
+/// period window and ordered by day (the providers slice them with the same
+/// date-only keys the meals/exercises use); the delta is profile-independent,
+/// so it shows with and without a complete profile.
 PeriodSummaryState buildPeriodSummary({
   required List<DayRollup> days,
   required UserProfile? profile,
   required DateTime today,
+  List<WeightEntry> weightEntries = const <WeightEntry>[],
 }) {
   final List<DayRollup> logged = <DayRollup>[
     for (final day in days)
@@ -200,7 +249,20 @@ PeriodSummaryState buildPeriodSummary({
       loggedDays: n,
       adherentDays: adherent,
       totalIntakeKcal: intakeSum,
+      weightEntries: weightEntries,
     );
+  }
+
+  // The goal-adherence count is profile-dependent (a goal IS profile state),
+  // so it is computed here where the engine's inputs are already resolved.
+  final int? goal = resolveDailyGoalKcal(profile);
+  var goalAdherent = 0;
+  if (goal != null) {
+    for (final day in logged) {
+      if (day.intakeKcal <= goal) {
+        goalAdherent++;
+      }
+    }
   }
 
   final EnergyBudget base = _requireBudget(
@@ -224,6 +286,9 @@ PeriodSummaryState buildPeriodSummary({
     PeriodSummary(
       days: days,
       baseBudgetKcal: base.baseBudgetKcal,
+      goalKcal: goal,
+      goalAdherentDays: goalAdherent,
+      weightEntries: weightEntries,
       loggedDays: n,
       adherentDays: adherent,
       totalIntakeKcal: intakeSum,

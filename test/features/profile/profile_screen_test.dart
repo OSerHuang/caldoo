@@ -364,6 +364,58 @@ void main() {
     },
   );
 
+  testWidgets('saving the form preserves the stored daily goal', (
+    WidgetTester tester,
+  ) async {
+    // Regression: _save used to rebuild the profile from the form fields
+    // alone, wiping dailyKcalGoalOverride on every 资料页保存.
+    final FakeProfileRepository repo = FakeProfileRepository();
+    addTearDown(repo.dispose);
+    await repo.saveProfile(
+      _autoProfile.copyWith(dailyKcalGoalOverride: 1399),
+    );
+    await _pumpProfile(tester, repo);
+
+    // The goal card shows the stored goal (and so does the 基础额度 card —
+    // with a goal set the baseline IS the goal).
+    expect(find.byKey(const Key('profile_daily_goal')), findsOneWidget);
+    expect(
+      tester.widget<Text>(
+        find.byKey(const Key('profile_daily_goal_value')),
+      ).data,
+      '1399 kcal',
+    );
+
+    // ...and a plain form save keeps it (untouched by this screen).
+    await _save(tester);
+
+    final UserProfile? saved = await repo.loadProfile();
+    expect(saved!.dailyKcalGoalOverride, 1399);
+  });
+
+  testWidgets('an external weight recording live-syncs the weight cell', (
+    WidgetTester tester,
+  ) async {
+    // Regression: the form seeded its fields once, so a body-weight recording
+    // (which rewrites the profile's weight externally) left a stale value in
+    // the cell — and the next 保存 would write that stale value back.
+    final FakeProfileRepository repo = FakeProfileRepository();
+    addTearDown(repo.dispose);
+    await repo.saveProfile(_autoProfile);
+    await _pumpProfile(tester, repo);
+    expect(_fieldText(tester, 'profile_weight_field'), '70');
+
+    // Simulate the weight log path: the stored profile's weight changes
+    // (the same write DriftWeightRepository.saveWeight performs).
+    await repo.saveProfile(_autoProfile.copyWith(weightKg: 68.4));
+    await tester.pumpAndSettle();
+
+    expect(_fieldText(tester, 'profile_weight_field'), '68.4');
+    // The derived BMR cell follows the new weight (auto mode, not pinned):
+    // 10*68.4 + 6.25*175 - 5*30 + 5 == 1632.75 -> 1633.
+    expect(_bmrText(tester), '1633');
+  });
+
   testWidgets(
     'the fixed 5 g/day salt target renders read-only, no child mode',
     (WidgetTester tester) async {

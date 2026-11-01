@@ -46,7 +46,7 @@ void main() {
         _budget(intake: 1936, exercise: 257),
       );
       expect(balance.kind, BalanceKind.deficit);
-      expect(balance.label, '缺口');
+      expect(balance.label, '缺口(相对额度)');
       expect(balance.valueKcal, 300);
     });
 
@@ -55,7 +55,7 @@ void main() {
         _budget(intake: 2536, exercise: 257),
       );
       expect(balance.kind, BalanceKind.surplus);
-      expect(balance.label, '盈余');
+      expect(balance.label, '盈余(相对额度)');
       expect(balance.valueKcal, 300);
     });
 
@@ -72,7 +72,7 @@ void main() {
       final EnergyBudget budget = _budget(intake: 1500);
       expect(budget.deficitKcal, 479); // 1979 - 1500
       final SignedBalance balance = SignedBalance.fromBudget(budget);
-      expect(balance.label, '缺口');
+      expect(balance.label, '缺口(相对额度)');
       expect(balance.valueKcal, 479);
       expect(balance.valueKcal, isNot(-479));
     });
@@ -81,7 +81,7 @@ void main() {
       final EnergyBudget budget = _budget(intake: 2500);
       expect(budget.energyBalanceKcal, 521); // 2500 - 1979
       final SignedBalance balance = SignedBalance.fromBudget(budget);
-      expect(balance.label, '盈余');
+      expect(balance.label, '盈余(相对额度)');
       expect(balance.valueKcal, 521);
       expect(balance.valueKcal, isNot(-521));
     });

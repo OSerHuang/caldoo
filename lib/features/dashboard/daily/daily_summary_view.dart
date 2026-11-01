@@ -60,6 +60,9 @@ const Key dailyExerciseKcalKey = Key('daily_exercise_kcal');
 /// Key of the day budget value (base + exercise).
 const Key dailyBudgetKey = Key('daily_budget');
 
+/// Key of the budget-composition subline (目标/基础代谢 + 运动) under the budget.
+const Key dailyBudgetSublineKey = Key('daily_budget_subline');
+
 /// Key of the signed-balance label (缺口 / 盈余 / 平衡).
 const Key dailyBalanceLabelKey = Key('daily_balance_label');
 
@@ -251,6 +254,28 @@ class _SummaryCard extends StatelessWidget {
                         valueKey: dailyBudgetKey,
                         value: units.energyValueText(budget.budgetKcal),
                         unit: units.energyUnit,
+                      ),
+                      // The budget's composition is ALWAYS shown: with a goal
+                      // it reads 目标 X + 运动 Y, without one 基础代谢 X +
+                      // 运动 Y — so 额度 (and the 缺口/盈余 against it) never
+                      // appears as an unexplained number.
+                      const SizedBox(height: 2),
+                      Text(
+                        budget.goalKcal != null
+                            ? S
+                                  .of(context)
+                                  .dailyGoalSubline(
+                                    budget.goalKcal!,
+                                    rollup.exerciseKcal,
+                                  )
+                            : S
+                                  .of(context)
+                                  .budgetBmrSubline(
+                                    budget.bmrKcal,
+                                    rollup.exerciseKcal,
+                                  ),
+                        key: dailyBudgetSublineKey,
+                        style: theme.textTheme.labelSmall,
                       ),
                       const SizedBox(height: 10),
                     ],

@@ -28,6 +28,7 @@ import 'package:caldoo/domain/models/user_profile.dart';
 import 'package:caldoo/l10n/app_format.dart';
 import 'package:caldoo/l10n/app_strings.dart';
 
+import 'daily_goal_sheet.dart';
 import 'profile_providers.dart';
 
 /// Validates the profile form: a birthday that yields an age of at least one,
@@ -90,6 +91,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   final TextEditingController _weightController = TextEditingController();
   final TextEditingController _bmrController = TextEditingController();
 
+  /// Focus node of the weight field: an external weight change (a body-weight
+  /// recording from the dashboard card or the trend page) must NOT clobber the
+  /// cell while the user is editing it.
+  final FocusNode _weightFocus = FocusNode();
+
   Sex _sex = Sex.male;
   DateTime? _birthDate;
 
@@ -102,8 +108,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   bool _syncingBmr = false;
 
   /// The saved profile is seeded into the fields exactly once; afterwards the
-  /// form is the user's to edit (the weight in particular is editable and the
-  /// BMR recomputes on save).
+  /// form is the user's to edit — EXCEPT the weight cell, which live-tracks
+  /// the stored profile (when unfocused): a body-weight recording writes the
+  /// profile's weight externally, and the stale form value would otherwise be
+  /// written back over it by the next 保存.
   bool _seeded = false;
   String? _error;
 
@@ -118,6 +126,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   @override
   void dispose() {
     _heightController.dispose();
+    _weightFocus.dispose();
     _weightController.dispose();
     _bmrController.dispose();
     super.dispose();
@@ -279,6 +288,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
 
     setState(() => _error = null);
+    // This save owns EXACTLY the five form fields — sex, birthday, height,
+    // weight and the BMR override. Every other profile field (the daily goal
+    // above all) is carried over from the stored row verbatim, so saving the
+    // form can never wipe something this screen does not edit.
+    final int? storedGoal = ref.read(storedProfileProvider).value
+        ?.dailyKcalGoalOverride;
     await ref
         .read(profileRepositoryProvider)
         .saveProfile(
@@ -288,6 +303,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             heightCm: double.parse(_heightController.text.trim()),
             weightKg: double.parse(_weightController.text.trim()),
             bmrKcalOverride: bmrOverride,
+            dailyKcalGoalOverride: storedGoal,
           ),
         );
     if (mounted) {
@@ -298,6 +314,26 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Live-sync the weight cell with the stored profile: a body-weight
+    // recording (dashboard card / trend page) rewrites the profile's weight
+    // externally. Only applies while the cell is not being edited, so an
+    // in-progress manual change is never clobbered mid-keystroke.
+    ref.listen<AsyncValue<UserProfile?>>(storedProfileProvider, (
+      AsyncValue<UserProfile?>? previous,
+      AsyncValue<UserProfile?> next,
+    ) {
+      final UserProfile? profile = next.value;
+      if (profile == null || !_seeded || _weightFocus.hasFocus) {
+        return;
+      }
+      final double? fieldWeight = double.tryParse(
+        _weightController.text.trim(),
+      );
+      if (fieldWeight == null || fieldWeight != profile.weightKg) {
+        _weightController.text = _formatNumber(profile.weightKg);
+      }
+    });
+
     final AsyncValue<UserProfile?> asyncProfile = ref.watch(
       storedProfileProvider,
     );
@@ -383,6 +419,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         TextField(
           key: const Key('profile_weight_field'),
           controller: _weightController,
+          focusNode: _weightFocus,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           inputFormatters: <TextInputFormatter>[
             FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
@@ -418,6 +455,47 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ),
           ),
         const SizedBox(height: 24),
+        // The daily energy goal: an explicit number the user picked (the goal
+        // sheet only pre-computes suggestions). Needs a resolvable BMR, so it
+        // appears exactly when the budget card below can appear.
+        Builder(
+          builder: (BuildContext context) {
+            final EnergyBudget? resolved = switch (budget) {
+              EnergyBudget() => budget,
+              _ => null,
+            };
+            final UserProfile? stored = ref.watch(storedProfileProvider).value;
+            if (resolved == null || stored == null) {
+              return const SizedBox.shrink();
+            }
+            final int? goal = stored.dailyKcalGoalOverride;
+            final int bmr = resolved.bmrKcal;
+            final String subtitle = goal == null
+                ? S.of(context).dailyGoalSubtitleNone
+                : goal == bmr
+                ? S.of(context).dailyGoalSubtitleMaintain
+                : goal < bmr
+                ? S.of(context).dailyGoalSubtitleCut(bmr - goal)
+                : S.of(context).dailyGoalSubtitleGain(goal - bmr);
+            return Card(
+              key: const Key('profile_daily_goal'),
+              child: ListTile(
+                leading: const Icon(Icons.flag_outlined),
+                title: Text(S.of(context).dailyGoalTitle),
+                subtitle: Text(subtitle),
+                trailing: Text(
+                  goal == null
+                      ? S.of(context).notSet
+                      : DisplayUnits.of(context).energyText(goal),
+                  key: const Key('profile_daily_goal_value'),
+                ),
+                onTap: () =>
+                    showDailyGoalSheet(context, profile: stored, bmrKcal: bmr),
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 8),
         // The target is a read-only display, so it follows the 盐/钠
         // preference (5 g salt <-> 2000 mg sodium); the value is fixed and
         // still not editable.
@@ -486,7 +564,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         S.of(context).profileBudgetIncomplete,
         key: const Key('profile_budget_incomplete'),
       ),
-      EnergyBudget(:final int budgetKcal) => Column(
+      EnergyBudget(:final int budgetKcal, :final int? goalKcal) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(
@@ -502,7 +580,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: 4),
-          Text(S.of(context).profileBaseBudgetNote),
+          // With a goal set the exercise-free baseline IS the goal, so the
+          // note says so; without one it is the BMR as before.
+          Text(
+            goalKcal == null
+                ? S.of(context).profileBaseBudgetNote
+                : S.of(context).profileBaseBudgetNoteGoal,
+          ),
         ],
       ),
     };

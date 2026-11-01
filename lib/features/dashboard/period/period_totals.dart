@@ -84,6 +84,9 @@ class PeriodTotals extends StatelessWidget {
     super.key,
     this.totalBurnKcal,
     this.totalBalanceKcal,
+    this.goalKcal,
+    this.goalAdherentDays = 0,
+    this.goalAdherenceKey,
   });
 
   /// The period's cumulative intake over its logged days, in whole kcal.
@@ -102,6 +105,16 @@ class PeriodTotals extends StatelessWidget {
 
   /// How many logged days stayed at or under the WHO sodium ceiling.
   final int adherentDays;
+
+  /// The user's daily energy goal in whole kcal/day, or `null` when no goal is
+  /// set — the 热量达标 tile renders only when a goal exists.
+  final int? goalKcal;
+
+  /// How many logged days stayed at or under [goalKcal] (0 without a goal).
+  final int goalAdherentDays;
+
+  /// Key of the goal-adherence value; required when [goalKcal] is set.
+  final Key? goalAdherenceKey;
 
   /// The period's widget-test keys.
   final PeriodTotalsKeys keys;
@@ -191,6 +204,21 @@ class PeriodTotals extends StatelessWidget {
                 unit: S.of(context).unitDays,
               ),
             ),
+            // The goal tile exists only when a goal is set: "达标" without a
+            // goal has no meaning (the budget then means "maintain").
+            if (goalKcal != null) ...<Widget>[
+              const SizedBox(width: 10),
+              Expanded(
+                child: MetricTile(
+                  label: S.of(context).labelGoalAdherence,
+                  valueKey: goalAdherenceKey,
+                  value: '$goalAdherentDays / $loggedDays',
+                  unit: S.of(context).unitDays,
+                  color: colors.primary,
+                  dotAlways: true,
+                ),
+              ),
+            ],
           ],
         ),
         if (totalBalanceKcal == null) ...<Widget>[

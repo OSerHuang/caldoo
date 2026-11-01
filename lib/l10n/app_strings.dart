@@ -66,6 +66,9 @@ class S {
   /// Day-count unit.
   String get unitDays => '天';
 
+  /// Kilogram unit (the weight block's delta chip).
+  String get unitKg => 'kg';
+
   /// Informal energy label used on the summary rows.
   String get labelEnergy => '热量';
 
@@ -402,11 +405,12 @@ class S {
   /// Salt metric value: `3.5 / 5`.
   String saltProgress(String current, String target) => '$current / $target';
 
-  /// Signed-balance label: deficit.
-  String get balanceDeficit => '缺口';
+  /// Signed-balance label: deficit — relative to the daily budget
+  /// (goal-or-BMR + exercise), which is what 今日额度 shows.
+  String get balanceDeficit => '缺口(相对额度)';
 
-  /// Signed-balance label: surplus.
-  String get balanceSurplus => '盈余';
+  /// Signed-balance label: surplus — relative to the daily budget.
+  String get balanceSurplus => '盈余(相对额度)';
 
   /// Signed-balance label: exactly on budget.
   String get balanceBalanced => '平衡';
@@ -1371,4 +1375,171 @@ class S {
 
   /// Base budget note.
   String get profileBaseBudgetNote => '即基础代谢消耗，不含刻意运动；记录运动后在此基础上叠加';
+
+  /// Base budget note when a daily goal is set (the baseline is the goal).
+  String get profileBaseBudgetNoteGoal => '即每日热量目标，不含刻意运动；记录运动后在此基础上叠加';
+
+  /// Generic "not set" placeholder.
+  String get notSet => '未设置';
+
+  // ===== 每日热量目标 =====
+
+  /// Daily-goal card title on the profile screen.
+  String get dailyGoalTitle => '每日热量目标';
+
+  /// Daily-goal card subtitle when no goal is set.
+  String get dailyGoalSubtitleNone => '未设置，按基础代谢计算每日额度';
+
+  /// Daily-goal card subtitle: the goal equals the resolved BMR.
+  String get dailyGoalSubtitleMaintain => '维持体重，与基础代谢相同';
+
+  /// Daily-goal card subtitle: goal below the resolved BMR (`diff` kcal/day).
+  String dailyGoalSubtitleCut(int diff) => '低于基础代谢 $diff 大卡/日';
+
+  /// Daily-goal card subtitle: goal above the resolved BMR (`diff` kcal/day).
+  String dailyGoalSubtitleGain(int diff) => '高于基础代谢 $diff 大卡/日';
+
+  /// Goal sheet title.
+  String get dailyGoalSheetTitle => '每日热量目标';
+
+  /// Goal sheet caption (`bmr` = the resolved basal metabolic rate).
+  String dailyGoalSheetCaption(int bmr) => '基础代谢 $bmr 大卡/日。不设目标时，每日额度就按基础代谢算。';
+
+  /// Preset: keep the resolved BMR (no explicit goal).
+  String get goalPresetMaintain => '维持体重';
+
+  /// Preset: gentle deficit.
+  String get goalPresetSlowCut => '缓慢减脂';
+
+  /// Preset: faster deficit.
+  String get goalPresetFastCut => '较快减脂';
+
+  /// Preset: surplus.
+  String get goalPresetGain => '增肌增重';
+
+  /// Subtitle of the 维持 preset (`bmr` = the resolved BMR).
+  String goalPresetMaintainSub(int bmr) => '不设目标，按基础代谢 $bmr 大卡';
+
+  /// Subtitle of the −250 preset (`bmr` = the resolved BMR).
+  String goalPresetSlowCutSub(int bmr) =>
+      '基础代谢 − 250 = ${bmr - 250} 大卡 · 每周约 −0.25 kg';
+
+  /// Subtitle of the −500 preset (`bmr` = the resolved BMR).
+  String goalPresetFastCutSub(int bmr) =>
+      '基础代谢 − 500 = ${bmr - 500} 大卡 · 每周约 −0.5 kg';
+
+  /// Subtitle of the +250 preset (`bmr` = the resolved BMR).
+  String goalPresetGainSub(int bmr) =>
+      '基础代谢 + 250 = ${bmr + 250} 大卡 · 每周约 +0.25 kg';
+
+  /// Custom-goal row label.
+  String get goalCustomLabel => '或自定义';
+
+  /// Custom-goal unit suffix.
+  String get goalCustomUnit => '大卡/日';
+
+  /// Preview line when no goal is set (`bmr`, `exercise`, `total` in kcal).
+  String goalPreviewNoGoal(int bmr, int exercise, int total) =>
+      '不设目标，按基础代谢 $bmr + 运动 $exercise = 每日额度 $total 大卡';
+
+  /// Preview line with a goal (`goal`, `exercise`, `total` in kcal).
+  String goalPreview(int goal, int exercise, int total) =>
+      '目标 $goal + 运动 $exercise = 每日额度 $total 大卡';
+
+  /// Restores the no-goal default (clears the stored goal).
+  String get goalRestoreDefault => '恢复默认（不设目标）';
+
+  /// Goal validation: a positive whole kcal integer is required.
+  String get goalValidationError => '目标需为大于 0 的整数';
+
+  /// Soft health hint shown for very low custom goals (never blocking).
+  String get goalLowHint => '提示：不建议长期低于 1200 大卡/日';
+
+  /// Daily subline under 今日额度 when a goal is set (`goal` + `exercise`).
+  String dailyGoalSubline(int goal, int exercise) => '目标 $goal + 运动 $exercise';
+
+  /// Daily subline under 今日额度 when NO goal is set: the budget composition
+  /// is always shown, so 额度 never reads as an unexplained number.
+  String budgetBmrSubline(int bmr, int exercise) => '基础代谢 $bmr + 运动 $exercise';
+
+  /// Weekly/monthly legend for the target line when a goal is set (the
+  /// exercise-free baseline is then the goal, not the BMR).
+  String get periodGoalLineLabel => '每日目标（不含运动）';
+
+  /// Weekly/monthly calorie-adherence value (`adherent` of `logged` days).
+  String goalAdherenceDays(int adherent, int logged) => '$adherent/$logged 天';
+
+  /// Weekly/monthly 热量达标 tile label (only rendered when a goal is set).
+  String get labelGoalAdherence => '热量达标';
+
+  // ===== 体重历史 =====
+
+  /// Weight card title on the dashboard.
+  String get weightCardTitle => '体重';
+
+  /// Weight card record action.
+  String get weightRecordAction => '记录';
+
+  /// Weight card prompt when no weight has ever been recorded.
+  String get weightCardEmptyPrompt => '还没有记录，点「记录」开始追踪体重';
+
+  /// Weight card hint opening the trend page.
+  String get weightCardOpenTrend => '查看趋势';
+
+  /// Weight 7-day delta chip (`delta` like "−0.6").
+  String weightDelta7d(String delta) => '$delta · 近7天';
+
+  /// Weight trend screen title.
+  String get weightTrendTitle => '体重趋势';
+
+  /// Range chip: last 30 days.
+  String get weightRange30 => '近30天';
+
+  /// Range chip: last 90 days.
+  String get weightRange90 => '近90天';
+
+  /// Range chip: everything.
+  String get weightRangeAll => '全部';
+
+  /// Stat label: latest weight.
+  String get weightStatNow => '当前';
+
+  /// Stat label: change over the last 7 recorded days.
+  String get weightStat7d => '近7天';
+
+  /// Stat label: change since the first entry.
+  String get weightStatAll => '累计';
+
+  /// Empty state of the weight trend page.
+  String get weightTrendEmpty => '还没有体重记录，先记一条吧';
+
+  /// Weight entry sheet title (recording a new/other day).
+  String get weightEntryTitleRecord => '记录体重';
+
+  /// Weight entry sheet title (editing an existing day).
+  String get weightEntryTitleEdit => '修改体重';
+
+  /// Weight entry date field label.
+  String get weightEntryDateLabel => '日期';
+
+  /// Weight entry value field label.
+  String get weightEntryValueLabel => '体重（kg）';
+
+  /// Weight entry validation message.
+  String get weightEntryValidationError => '请输入有效的体重（大于 0）';
+
+  /// Weight entry note: re-recording a day overwrites it.
+  String get weightEntryOverwriteNote => '当天已有记录时会覆盖';
+
+  /// Note under the entry sheet: saving also syncs the profile weight.
+  String get weightSyncNote => '记录体重会同步更新「我的」里的体重，基础代谢随之重算';
+
+  /// Delete action for a weight row.
+  String get weightDeleteAction => '删除';
+
+  /// Confirm title for deleting a weight entry.
+  String get weightDeleteConfirmTitle => '删除这条体重记录？';
+
+  /// Snack after deleting a weight entry.
+  String get weightDeletedSnack => '已删除';
 }

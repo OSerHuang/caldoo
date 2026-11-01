@@ -118,7 +118,7 @@ void main() {
 
     // SIGNED balance: 缺口 from deficitKcal (budget - intake) = 300, and it
     // must NOT be labelled 盈余.
-    expect(_text(tester, dailyBalanceLabelKey), '缺口');
+    expect(_text(tester, dailyBalanceLabelKey), '缺口(相对额度)');
     expect(_text(tester, dailyBalanceValueKey), '300');
     expect(_color(tester, dailyBalanceLabelKey), dailyDeficitColor);
     expect(_color(tester, dailyBalanceValueKey), dailyDeficitColor);
@@ -152,7 +152,7 @@ void main() {
 
     // SIGNED balance: 盈余 from energyBalanceKcal (intake - budget) = 300,
     // with a colour inverted from the deficit case.
-    expect(_text(tester, dailyBalanceLabelKey), '盈余');
+    expect(_text(tester, dailyBalanceLabelKey), '盈余(相对额度)');
     expect(_text(tester, dailyBalanceValueKey), '300');
     expect(_color(tester, dailyBalanceLabelKey), dailySurplusColor);
     expect(
@@ -192,8 +192,8 @@ void main() {
       expect(find.byKey(dailyBudgetKey), findsNothing);
       expect(find.byKey(dailyBalanceLabelKey), findsNothing);
       expect(find.byKey(dailyBalanceValueKey), findsNothing);
-      expect(find.text('缺口'), findsNothing);
-      expect(find.text('盈余'), findsNothing);
+      expect(find.text('缺口(相对额度)'), findsNothing);
+      expect(find.text('盈余(相对额度)'), findsNothing);
       expect(find.byKey(dailyProfilePromptKey), findsOneWidget);
 
       // The provider itself reports the typed incomplete-profile state.
@@ -352,4 +352,50 @@ void main() {
       expect(find.text('mg'), findsOneWidget);
     },
   );
+
+  testWidgets('a stored goal becomes the baseline with a 目标 + 运动 breakdown', (
+    WidgetTester tester,
+  ) async {
+    await seedDashboard(
+      meals: mealRepo,
+      exercises: exerciseRepo,
+      profile: profileRepo,
+      mealGroups: dashboardDeficitMeals(),
+      withExercise: true,
+    );
+    // The goal replaces the BMR as the exercise-free baseline: 1700 + 257,
+    // NOT 1979 + 257.
+    await profileRepo.saveProfile(
+      dashboardProfile.copyWith(dailyKcalGoalOverride: 1700),
+    );
+
+    await pumpDashboard(tester);
+
+    expect(
+      _text(tester, dailyBudgetKey),
+      '1957',
+      reason: 'goal 1700 + exercise 257; the 1979 BMR is not the baseline',
+    );
+    expect(_text(tester, dailyBudgetSublineKey), '目标 1700 + 运动 257');
+    expect(_text(tester, dailyBalanceLabelKey), '缺口(相对额度)');
+    expect(_text(tester, dailyBalanceValueKey), '21');
+  });
+
+  testWidgets('without a goal the subline names the BMR composition', (
+    WidgetTester tester,
+  ) async {
+    await seedDashboard(
+      meals: mealRepo,
+      exercises: exerciseRepo,
+      profile: profileRepo,
+      mealGroups: dashboardDeficitMeals(),
+      withExercise: true,
+    );
+
+    await pumpDashboard(tester);
+
+    expect(_text(tester, dailyBudgetKey), '2236');
+    // The composition is ALWAYS shown; without a goal the baseline is the BMR.
+    expect(_text(tester, dailyBudgetSublineKey), '基础代谢 1979 + 运动 257');
+  });
 }
