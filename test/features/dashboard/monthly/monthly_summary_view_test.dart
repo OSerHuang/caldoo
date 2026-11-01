@@ -71,17 +71,20 @@ void main() {
   late FakeMealRepository mealRepo;
   late FakeExerciseRepository exerciseRepo;
   late FakeProfileRepository profileRepo;
+  late FakeWeightRepository weightRepo;
 
   setUp(() {
     mealRepo = FakeMealRepository();
     exerciseRepo = FakeExerciseRepository();
     profileRepo = FakeProfileRepository();
+    weightRepo = FakeWeightRepository();
   });
 
   tearDown(() async {
     await mealRepo.dispose();
     await exerciseRepo.dispose();
     await profileRepo.dispose();
+    await weightRepo.dispose();
   });
 
   /// Pumps the monthly dashboard over the fakes and returns the live container.
@@ -101,6 +104,9 @@ void main() {
           mealRepositoryProvider.overrideWithValue(mealRepo),
           exerciseRepositoryProvider.overrideWithValue(exerciseRepo),
           profileRepositoryProvider.overrideWithValue(profileRepo),
+          // The weight stream feeds the 体重变化 tile; the fake keeps the real
+          // file database out of the widget tests.
+          weightRepositoryProvider.overrideWithValue(weightRepo),
           monthlyClockProvider.overrideWithValue(monthlyClock()),
           monthlyOffsetProvider.overrideWithValue(monthlyOffset),
         ],

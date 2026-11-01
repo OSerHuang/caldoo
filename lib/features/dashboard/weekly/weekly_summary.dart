@@ -16,6 +16,7 @@ library;
 
 import 'package:caldoo/domain/models/day_rollup.dart';
 import 'package:caldoo/domain/models/user_profile.dart';
+import 'package:caldoo/domain/models/weight_entry.dart';
 import 'package:caldoo/l10n/app_strings.dart';
 
 import '../period/period_summary.dart';
@@ -61,4 +62,10 @@ WeeklySummaryState buildWeeklySummary({
   required List<DayRollup> week,
   required UserProfile? profile,
   required DateTime today,
-}) => buildPeriodSummary(days: week, profile: profile, today: today);
+  List<WeightEntry> weightEntries = const <WeightEntry>[],
+}) => buildPeriodSummary(
+  days: week,
+  profile: profile,
+  today: today,
+  weightEntries: weightEntries,
+);

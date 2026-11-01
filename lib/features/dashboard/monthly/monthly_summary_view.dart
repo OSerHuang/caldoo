@@ -54,6 +54,8 @@ import 'package:caldoo/core/theme/app_semantic_colors.dart';
 import 'package:caldoo/core/ui/app_card.dart';
 import 'package:caldoo/core/units/display_units.dart';
 import 'package:caldoo/domain/models/day_rollup.dart';
+import 'package:caldoo/domain/models/weight_entry.dart';
+import 'package:caldoo/features/weight/weight_period_block.dart';
 import 'package:caldoo/l10n/app_format.dart';
 import 'package:caldoo/l10n/app_strings.dart';
 
@@ -88,6 +90,12 @@ const Key monthlyIntakeLegendKey = Key('monthly_intake_legend');
 
 /// Key of the chart's target-line legend.
 const Key monthlyTargetLegendKey = Key('monthly_target_legend');
+
+/// Key of the goal-adherence value (`adherent / logged`, when a goal is set).
+const Key monthlyGoalAdherenceKey = Key('monthly_goal_adherence');
+
+/// Key of the weight-change value (when the month holds two+ weight entries).
+const Key monthlyWeightKey = Key('monthly_weight');
 
 /// Key of the bar chart itself.
 const Key monthlyChartKey = Key('monthly_chart');
@@ -186,6 +194,7 @@ class MonthlySummaryView extends ConsumerWidget {
         :final int loggedDays,
         :final int adherentDays,
         :final int totalIntakeKcal,
+        :final List<WeightEntry> weightEntries,
       ) =>
         _MonthlyCard(
           days: days,
@@ -193,16 +202,20 @@ class MonthlySummaryView extends ConsumerWidget {
           loggedDays: loggedDays,
           adherentDays: adherentDays,
           totalIntakeKcal: totalIntakeKcal,
+          weightEntries: weightEntries,
           isCurrentMonth: isCurrentMonth,
         ),
       PeriodSummaryReady(:final PeriodSummary summary) => _MonthlyCard(
         days: summary.days,
         baseBudgetKcal: summary.baseBudgetKcal,
+        goalKcal: summary.goalKcal,
+        goalAdherentDays: summary.goalAdherentDays,
         loggedDays: summary.loggedDays,
         adherentDays: summary.adherentDays,
         totalIntakeKcal: summary.totalIntakeKcal,
         totalBurnKcal: summary.totalBurnKcal,
         totalBalanceKcal: summary.totalBalanceKcal,
+        weightEntries: summary.weightEntries,
         isCurrentMonth: isCurrentMonth,
       ),
     };
@@ -218,6 +231,9 @@ class _MonthlyCard extends StatelessWidget {
     required this.adherentDays,
     required this.totalIntakeKcal,
     required this.isCurrentMonth,
+    this.goalKcal,
+    this.goalAdherentDays = 0,
+    this.weightEntries = const <WeightEntry>[],
     this.totalBurnKcal,
     this.totalBalanceKcal,
   });
@@ -225,8 +241,19 @@ class _MonthlyCard extends StatelessWidget {
   /// The month's rollups, in calendar order (28..31 entries).
   final List<DayRollup> days;
 
-  /// The exercise-free base budget, or `null` when the profile is incomplete.
+  /// The exercise-free base budget (the user's goal when set, else the BMR), or
+  /// `null` when the profile is incomplete.
   final int? baseBudgetKcal;
+
+  /// The user's daily energy goal, or `null` when no goal is set — it selects
+  /// the target-line label and the 热量达标 tile.
+  final int? goalKcal;
+
+  /// How many logged days stayed at or under [goalKcal] (0 without a goal).
+  final int goalAdherentDays;
+
+  /// The month's body-weight entries, day-ordered (feeds the 体重 line block).
+  final List<WeightEntry> weightEntries;
 
   /// How many days of the month logged at least one meal.
   final int loggedDays;
@@ -316,7 +343,15 @@ class _MonthlyCard extends StatelessWidget {
               if (baseBudgetKcal != null)
                 PeriodLegendDash(
                   color: semantics.chartTarget,
-                  label: S.of(context).targetLegend(periodTargetLineLabel),
+                  // The dashed line is the goal when one is set, else the BMR;
+                  // the label names whichever the line actually is.
+                  label: S
+                      .of(context)
+                      .targetLegend(
+                        goalKcal != null
+                            ? S.of(context).periodGoalLineLabel
+                            : periodTargetLineLabel,
+                      ),
                   textKey: monthlyTargetLegendKey,
                 ),
             ],
@@ -328,7 +363,22 @@ class _MonthlyCard extends StatelessWidget {
             totalBalanceKcal: totalBalanceKcal,
             loggedDays: loggedDays,
             adherentDays: adherentDays,
+            goalKcal: goalKcal,
+            goalAdherentDays: goalAdherentDays,
+            goalAdherenceKey: monthlyGoalAdherenceKey,
             keys: _monthlyTotalsKeys,
+          ),
+          const SizedBox(height: 12),
+          // The month's weight line: its own kg plot, plus the period delta in
+          // the header. The block is also the 周/月 discovery point (a prompt
+          // with a 记录 action when the month has no weight entries).
+          WeightPeriodBlock(
+            key: monthlyWeightKey,
+            entries: weightEntries,
+            periodStart: days.first.date,
+            slotCount: days.length,
+            recordInitialDay: days.last.date,
+            deltaKey: const Key('monthly_weight_delta'),
           ),
         ],
       ),

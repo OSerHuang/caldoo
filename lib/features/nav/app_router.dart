@@ -44,6 +44,7 @@ import 'package:caldoo/features/nav/profile_tab_screen.dart';
 import 'package:caldoo/features/nav/review_args.dart';
 import 'package:caldoo/features/nav/today_screen.dart';
 import 'package:caldoo/features/profile/profile_screen.dart';
+import 'package:caldoo/features/weight/weight_trend_screen.dart';
 import 'package:caldoo/features/settings/ai_settings_screen.dart';
 import 'package:caldoo/features/settings/backup/backup_screen.dart';
 import 'package:caldoo/features/settings/display_settings_screen.dart';
@@ -99,6 +100,12 @@ StatefulShellRoute _shellRoute() {
                     initialDay: extra is DateTime ? extra : null,
                   );
                 },
+              ),
+              // The weight-trend page, opened from the today page's 体重 card.
+              GoRoute(
+                path: 'weight',
+                builder: (BuildContext context, GoRouterState state) =>
+                    const WeightTrendScreen(),
               ),
             ],
           ),

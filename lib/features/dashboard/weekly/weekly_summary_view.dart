@@ -49,6 +49,8 @@ import 'package:caldoo/core/theme/app_semantic_colors.dart';
 import 'package:caldoo/core/ui/app_card.dart';
 import 'package:caldoo/core/units/display_units.dart';
 import 'package:caldoo/domain/models/day_rollup.dart';
+import 'package:caldoo/domain/models/weight_entry.dart';
+import 'package:caldoo/features/weight/weight_period_block.dart';
 import 'package:caldoo/l10n/app_format.dart';
 import 'package:caldoo/l10n/app_strings.dart';
 
@@ -81,6 +83,12 @@ const Key weeklyLoggedDaysKey = Key('weekly_logged_days');
 
 /// Key of the salt-adherence value (`adherent / logged`).
 const Key weeklySaltAdherenceKey = Key('weekly_salt_adherence');
+
+/// Key of the goal-adherence value (`adherent / logged`, when a goal is set).
+const Key weeklyGoalAdherenceKey = Key('weekly_goal_adherence');
+
+/// Key of the weight-change value (when the week holds two+ weight entries).
+const Key weeklyWeightKey = Key('weekly_weight');
 
 /// Key of the "完善资料" prompt shown when the profile is incomplete.
 const Key weeklyProfilePromptKey = Key('weekly_profile_prompt');
@@ -192,6 +200,7 @@ class WeeklySummaryView extends ConsumerWidget {
         :final int loggedDays,
         :final int adherentDays,
         :final int totalIntakeKcal,
+        :final List<WeightEntry> weightEntries,
       ) =>
         _WeeklyCard(
           days: days,
@@ -199,16 +208,20 @@ class WeeklySummaryView extends ConsumerWidget {
           loggedDays: loggedDays,
           adherentDays: adherentDays,
           totalIntakeKcal: totalIntakeKcal,
+          weightEntries: weightEntries,
           isCurrentWeek: isCurrentWeek,
         ),
       WeeklySummaryReady(:final WeeklySummary summary) => _WeeklyCard(
         days: summary.days,
         baseBudgetKcal: summary.baseBudgetKcal,
+        goalKcal: summary.goalKcal,
+        goalAdherentDays: summary.goalAdherentDays,
         loggedDays: summary.loggedDays,
         adherentDays: summary.adherentDays,
         totalIntakeKcal: summary.totalIntakeKcal,
         totalBurnKcal: summary.totalBurnKcal,
         totalBalanceKcal: summary.totalBalanceKcal,
+        weightEntries: summary.weightEntries,
         isCurrentWeek: isCurrentWeek,
       ),
     };
@@ -224,14 +237,28 @@ class _WeeklyCard extends StatelessWidget {
     required this.adherentDays,
     required this.totalIntakeKcal,
     required this.isCurrentWeek,
+    this.goalKcal,
+    this.goalAdherentDays = 0,
+    this.weightEntries = const <WeightEntry>[],
     this.totalBurnKcal,
     this.totalBalanceKcal,
   });
 
   final List<DayRollup> days;
 
-  /// The exercise-free base budget, or `null` when the profile is incomplete.
+  /// The exercise-free base budget (the user's goal when set, else the BMR), or
+  /// `null` when the profile is incomplete.
   final int? baseBudgetKcal;
+
+  /// The user's daily energy goal, or `null` when no goal is set — it selects
+  /// the target-line label and the 热量达标 tile.
+  final int? goalKcal;
+
+  /// How many logged days stayed at or under [goalKcal] (0 without a goal).
+  final int goalAdherentDays;
+
+  /// The week's body-weight entries, day-ordered (feeds the 体重 line block).
+  final List<WeightEntry> weightEntries;
 
   final int loggedDays;
   final int adherentDays;
@@ -309,7 +336,15 @@ class _WeeklyCard extends StatelessWidget {
               if (baseBudgetKcal != null)
                 PeriodLegendDash(
                   color: semantics.chartTarget,
-                  label: S.of(context).targetLegend(weeklyTargetLineLabel),
+                  // The dashed line is the goal when one is set, else the BMR;
+                  // the label names whichever the line actually is.
+                  label: S
+                      .of(context)
+                      .targetLegend(
+                        goalKcal != null
+                            ? S.of(context).periodGoalLineLabel
+                            : weeklyTargetLineLabel,
+                      ),
                   textKey: weeklyTargetLegendKey,
                 ),
             ],
@@ -321,7 +356,22 @@ class _WeeklyCard extends StatelessWidget {
             totalBalanceKcal: totalBalanceKcal,
             loggedDays: loggedDays,
             adherentDays: adherentDays,
+            goalKcal: goalKcal,
+            goalAdherentDays: goalAdherentDays,
+            goalAdherenceKey: weeklyGoalAdherenceKey,
             keys: _weeklyTotalsKeys,
+          ),
+          const SizedBox(height: 12),
+          // The week's weight line: its own kg plot, plus the period delta in
+          // the header. The block is also the 周/月 discovery point (a prompt
+          // with a 记录 action when the week has no weight entries).
+          WeightPeriodBlock(
+            key: weeklyWeightKey,
+            entries: weightEntries,
+            periodStart: days.first.date,
+            slotCount: days.length,
+            recordInitialDay: days.last.date,
+            deltaKey: const Key('weekly_weight_delta'),
           ),
         ],
       ),

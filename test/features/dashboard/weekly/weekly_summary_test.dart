@@ -11,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:caldoo/core/time/date_windows.dart';
 import 'package:caldoo/domain/models/daily_exercise.dart';
 import 'package:caldoo/domain/models/day_rollup.dart';
+import 'package:caldoo/domain/models/weight_entry.dart';
 import 'package:caldoo/features/dashboard/weekly/weekly_summary.dart';
 
 import '_fixtures.dart';
@@ -155,5 +156,57 @@ void main() {
     expect(weeklyTargetLineLabel, '基础代谢(不含运动)');
     expect(weeklyTargetLineLabel, isNot(contains('今日额度')));
     expect(weeklyTargetLineDashArray, <int>[6, 4]);
+  });
+
+  group('weight change = last in-week entry minus first (>= 2 entries)', () {
+    /// Runs the builder with in-week weight rows (Jan 5..11 = the fixture week).
+    WeeklySummaryState buildWithWeights(List<WeightEntry> entries) =>
+        buildWeeklySummary(
+          week: _fixtureWeek(),
+          profile: weeklyProfile,
+          today: weeklyNow,
+          weightEntries: entries,
+        );
+
+    test('three entries -> last minus first, signed', () {
+      final WeeklySummaryState state = buildWithWeights(<WeightEntry>[
+        WeightEntry(dayKey: weeklyDayKey(0), weightKg: 69.0),
+        WeightEntry(dayKey: weeklyDayKey(4), weightKg: 68.7),
+        WeightEntry(dayKey: weeklyDayKey(6), weightKg: 68.4),
+      ]);
+      final WeeklySummary summary = switch (state) {
+        final WeeklySummaryReady ready => ready.summary,
+        _ => fail('expected ready, got ${state.runtimeType}'),
+      };
+      expect(summary.weightDeltaKg, closeTo(-0.6, 1e-9));
+    });
+
+    test('a single entry has no direction -> null (no tile)', () {
+      final WeeklySummaryState state = buildWithWeights(<WeightEntry>[
+        WeightEntry(dayKey: weeklyDayKey(2), weightKg: 68.4),
+      ]);
+      expect((state as WeeklySummaryReady).summary.weightDeltaKg, isNull);
+    });
+
+    test('no entries -> null', () {
+      final WeeklySummary summary = _ready(_fixtureWeek());
+      expect(summary.weightDeltaKg, isNull);
+    });
+
+    test('the delta is profile-independent: NoProfile carries it too', () {
+      final WeeklySummaryState state = buildWeeklySummary(
+        week: _fixtureWeek(),
+        profile: null,
+        today: weeklyNow,
+        weightEntries: <WeightEntry>[
+          WeightEntry(dayKey: weeklyDayKey(0), weightKg: 69.0),
+          WeightEntry(dayKey: weeklyDayKey(6), weightKg: 69.6),
+        ],
+      );
+      expect(
+        (state as WeeklySummaryNoProfile).weightDeltaKg,
+        closeTo(0.6, 1e-9),
+      );
+    });
   });
 }

@@ -49,6 +49,7 @@ import 'package:caldoo/core/time/day_tick_provider.dart';
 import 'package:caldoo/domain/models/daily_exercise.dart';
 import 'package:caldoo/domain/models/day_rollup.dart';
 import 'package:caldoo/domain/models/user_profile.dart';
+import 'package:caldoo/domain/models/weight_entry.dart';
 
 import 'weekly_summary.dart';
 
@@ -145,6 +146,25 @@ final weeklyProfileProvider = StreamProvider<UserProfile?>((ref) {
   return ref.watch(profileRepositoryProvider).watchProfile();
 });
 
+/// The body-weight entries of the local week starting on the date-only
+/// [mondayKey], live from the [WeightRepository].
+///
+/// The range is expressed in date-only day keys (Monday through the following
+/// Monday), exactly like the exercises; the period's weight-change tile is
+/// derived from these by [buildPeriodSummary].
+final weeklyWeightsForWeekProvider =
+    StreamProvider.family<List<WeightEntry>, DateTime>((
+      ref,
+      DateTime mondayKey,
+    ) {
+      return ref
+          .watch(weightRepositoryProvider)
+          .watchRange(
+            startInclusive: mondayKey,
+            endExclusive: mondayKey.add(const Duration(days: 7)),
+          );
+    });
+
 /// The seven rollups Monday..Sunday of the local week starting on the date-only
 /// [mondayKey], recomputed from the live streams.
 ///
@@ -190,10 +210,15 @@ final weeklySummaryForWeekProvider =
       if (stillLoading) {
         return const WeeklySummaryLoading();
       }
+      // The weight stream deliberately does NOT gate the loading state: while
+      // it loads the summary renders with no weight tile, never a spinner.
       return buildWeeklySummary(
         week: ref.watch(weeklyRollupsForWeekProvider(mondayKey)),
         profile: profile.value,
         today: ref.watch(weeklyClockProvider).now(),
+        weightEntries:
+            ref.watch(weeklyWeightsForWeekProvider(mondayKey)).value ??
+            const <WeightEntry>[],
       );
     });
 

@@ -69,6 +69,8 @@ import 'package:caldoo/features/dashboard/monthly/monthly_summary_providers.dart
 import 'package:caldoo/features/dashboard/monthly/monthly_summary_view.dart';
 import 'package:caldoo/features/dashboard/weekly/weekly_summary_providers.dart';
 import 'package:caldoo/features/dashboard/weekly/weekly_summary_view.dart';
+import 'package:caldoo/features/weight/weight_card.dart';
+import 'package:caldoo/features/weight/weight_providers.dart';
 import 'package:caldoo/l10n/app_format.dart';
 import 'package:caldoo/l10n/app_strings.dart';
 
@@ -352,7 +354,7 @@ class _DayPage extends StatelessWidget {
 }
 
 /// The scrollable content of one day's page.
-class _DayPageBody extends StatelessWidget {
+class _DayPageBody extends ConsumerWidget {
   const _DayPageBody({required this.dayKey, required this.isToday});
 
   /// The date-only key of the day this page renders.
@@ -362,12 +364,29 @@ class _DayPageBody extends StatelessWidget {
   final bool isToday;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // The weight card mounts only when weight history EXISTS: the day page's
+    // hero + quick-add + log fill a phone viewport on their own, so an
+    // empty-state card would push the log below the fold for users who never
+    // record weight. Discovery lives on the 我的 tab (体重 entry); once a
+    // first weight is recorded the card appears here, right under the hero.
+    final AsyncValue<List<WeightEntry>> weightEntries = isToday
+        ? ref.watch(weightEntriesProvider)
+        : const AsyncValue<List<WeightEntry>>.data(<WeightEntry>[]);
+    final bool showWeightCard = weightEntries.maybeWhen(
+      data: (List<WeightEntry> entries) => entries.isNotEmpty,
+      orElse: () => false,
+    );
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: <Widget>[
         DailySummaryView(dayKey: dayKey, isToday: isToday),
         const SizedBox(height: 16),
+        if (showWeightCard) ...<Widget>[
+          WeightCard(todayKey: dayKey),
+          const SizedBox(height: 16),
+        ],
         Row(
           children: <Widget>[
             Expanded(

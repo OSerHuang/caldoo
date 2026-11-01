@@ -2,7 +2,9 @@
 ///
 /// A hub rather than the profile form itself so every personal/settings screen
 /// lives under one parent route (`/profile/...`) while keeping the tab's own
-/// navigation stack. Includes the task-29 "delete all local data" action.
+/// navigation stack. Includes the task-29 "delete all local data" action. The
+/// weight feature is NOT a hub entry: its 周/月 dashboard block and the
+/// dashboard card are the discovery points.
 library;
 
 import 'package:flutter/material.dart';

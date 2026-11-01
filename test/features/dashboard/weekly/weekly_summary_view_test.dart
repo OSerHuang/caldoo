@@ -73,17 +73,20 @@ void main() {
   late FakeMealRepository mealRepo;
   late FakeExerciseRepository exerciseRepo;
   late FakeProfileRepository profileRepo;
+  late FakeWeightRepository weightRepo;
 
   setUp(() {
     mealRepo = FakeMealRepository();
     exerciseRepo = FakeExerciseRepository();
     profileRepo = FakeProfileRepository();
+    weightRepo = FakeWeightRepository();
   });
 
   tearDown(() async {
     await mealRepo.dispose();
     await exerciseRepo.dispose();
     await profileRepo.dispose();
+    await weightRepo.dispose();
   });
 
   /// Pumps the weekly dashboard over the fakes and returns the live container.
@@ -100,6 +103,9 @@ void main() {
           mealRepositoryProvider.overrideWithValue(mealRepo),
           exerciseRepositoryProvider.overrideWithValue(exerciseRepo),
           profileRepositoryProvider.overrideWithValue(profileRepo),
+          // The weight stream feeds the 体重变化 tile; the fake keeps the real
+          // file database out of the widget tests.
+          weightRepositoryProvider.overrideWithValue(weightRepo),
           weeklyClockProvider.overrideWithValue(weeklyClock()),
           weeklyOffsetProvider.overrideWithValue(weeklyOffset),
           // The current-week pointer follows the day-tick signal; these tests
@@ -736,5 +742,69 @@ void main() {
         'WEEKLY_UNITS tooltip=${text.replaceAll('\n', ' | ')} -> PASS',
       );
     });
+  });
+
+  group('体重 line block (light integration of the weight stream)', () {
+    testWidgets('two+ in-week entries -> kg line with the signed delta', (
+      WidgetTester tester,
+    ) async {
+      await seedWeekly(
+        meals: mealRepo,
+        exercises: exerciseRepo,
+        profile: profileRepo,
+        mealGroups: weeklyMeals(),
+        exerciseEntries: weeklyExercises(),
+      );
+      await weightRepo.saveWeight(dayKey: weeklyDayKey(0), weightKg: 69.0);
+      await weightRepo.saveWeight(dayKey: weeklyDayKey(6), weightKg: 68.4);
+
+      await pumpWeekly(tester);
+
+      expect(find.byKey(weeklyWeightKey), findsOneWidget);
+      expect(find.byKey(const Key('weekly_weight_delta')), findsOneWidget);
+      expect(find.text('−0.6 kg'), findsOneWidget);
+      expect(find.byType(LineChart), findsOneWidget);
+      expect(find.text('还没有记录，点「记录」开始追踪体重'), findsNothing);
+    });
+
+    testWidgets('one entry -> a dot, no delta, no prompt', (
+      WidgetTester tester,
+    ) async {
+      await seedWeekly(
+        meals: mealRepo,
+        exercises: exerciseRepo,
+        profile: profileRepo,
+        mealGroups: weeklyMeals(),
+        exerciseEntries: weeklyExercises(),
+      );
+      await weightRepo.saveWeight(dayKey: weeklyDayKey(2), weightKg: 68.4);
+
+      await pumpWeekly(tester);
+
+      expect(find.byKey(weeklyWeightKey), findsOneWidget);
+      expect(find.byKey(const Key('weekly_weight_delta')), findsNothing);
+      expect(find.byType(LineChart), findsOneWidget);
+      expect(find.text('还没有记录，点「记录」开始追踪体重'), findsNothing);
+    });
+
+    testWidgets(
+      'no entries -> the recording prompt (the 周/月 discovery point)',
+      (WidgetTester tester) async {
+        await seedWeekly(
+          meals: mealRepo,
+          exercises: exerciseRepo,
+          profile: profileRepo,
+          mealGroups: weeklyMeals(),
+          exerciseEntries: weeklyExercises(),
+        );
+
+        await pumpWeekly(tester);
+
+        expect(find.byKey(weeklyWeightKey), findsOneWidget);
+        expect(find.text('还没有记录，点「记录」开始追踪体重'), findsOneWidget);
+        expect(find.byKey(const Key('weight_block_record')), findsOneWidget);
+        expect(find.byType(LineChart), findsNothing);
+      },
+    );
   });
 }

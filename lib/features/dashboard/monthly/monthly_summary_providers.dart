@@ -49,6 +49,7 @@ import 'package:caldoo/core/time/day_tick_provider.dart';
 import 'package:caldoo/domain/models/daily_exercise.dart';
 import 'package:caldoo/domain/models/day_rollup.dart';
 import 'package:caldoo/domain/models/user_profile.dart';
+import 'package:caldoo/domain/models/weight_entry.dart';
 import 'package:caldoo/features/dashboard/period/period_summary.dart';
 
 /// The time seam; production reads the ambient [clock], tests fix it.
@@ -142,6 +143,27 @@ final monthlyProfileProvider = StreamProvider<UserProfile?>((ref) {
   return ref.watch(profileRepositoryProvider).watchProfile();
 });
 
+/// The body-weight entries of the local month starting on the date-only
+/// [monthKey], live from the [WeightRepository].
+///
+/// The range is expressed in date-only day keys (the month's first-day key
+/// through the following month's first-day key), exactly like the exercises;
+/// the period's weight-change tile is derived from these by
+/// [buildPeriodSummary].
+final monthlyWeightsForMonthProvider =
+    StreamProvider.family<List<WeightEntry>, DateTime>((
+      ref,
+      DateTime monthKey,
+    ) {
+      final DateTime firstDay = monthFirstDayKey(monthKey);
+      return ref
+          .watch(weightRepositoryProvider)
+          .watchRange(
+            startInclusive: firstDay,
+            endExclusive: monthKeyAfter(firstDay, 1),
+          );
+    });
+
 /// The 28..31 rollups of the local month starting on the date-only [monthKey],
 /// in calendar order, recomputed from the live streams.
 ///
@@ -188,10 +210,15 @@ final monthlySummaryForMonthProvider =
       if (stillLoading) {
         return const PeriodSummaryLoading();
       }
+      // The weight stream deliberately does NOT gate the loading state: while
+      // it loads the summary renders with no weight tile, never a spinner.
       return buildPeriodSummary(
         days: ref.watch(monthlyRollupsForMonthProvider(monthKey)),
         profile: profile.value,
         today: ref.watch(monthlyClockProvider).now(),
+        weightEntries:
+            ref.watch(monthlyWeightsForMonthProvider(monthKey)).value ??
+            const <WeightEntry>[],
       );
     });
 
