@@ -102,12 +102,9 @@ Future<void> logLabelMeal(WidgetTester tester, IntegrationEnv env) async {
 /// 257.25 rounded) for today. The burn field is digits-only, so the value is
 /// typed as a whole number.
 ///
-/// The screen opens on yesterday (exercise is normally backfilled the morning
-/// after), so the flow first switches to 今天 through the real shortcut.
+/// With no pushed day the screen edits today, so the value saves directly.
 Future<void> logExercise(WidgetTester tester, IntegrationEnv env) async {
   await env.pump(tester, const ExerciseEntryScreen());
-  await tester.tap(find.text('今天'));
-  await tester.pumpAndSettle();
   await tester.enterText(find.byKey(exerciseKcalFieldKey), '257');
   await tester.pumpAndSettle();
   await tester.tap(find.byKey(exerciseSaveButtonKey));

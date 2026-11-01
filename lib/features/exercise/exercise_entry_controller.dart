@@ -6,8 +6,8 @@
 /// in-memory fake.
 ///
 /// The row written is the one for the **selected** day
-/// ([exerciseSelectedDayProvider]) — the screen may be backfilling yesterday
-/// rather than editing today, so no call here assumes `today`.
+/// ([exerciseSelectedDayProvider]) — the screen may be backfilling a browsed
+/// past day rather than editing today, so no call here assumes `today`.
 ///
 /// ## Documented input handling
 ///
@@ -39,8 +39,8 @@ class ExerciseEntryState {
     this.error,
   });
 
-  /// The date-only key of the day being edited; `null` while the opening
-  /// default resolves.
+  /// The date-only key of the day being edited; `null` only in the first
+  /// frame before the screen selects the day.
   final DateTime? day;
 
   /// The editable burn in **whole kcal**; `null` while the field is blank.

@@ -8,11 +8,11 @@
 ///
 /// ## Which day is being edited?
 ///
-/// Exercise is normally copied off a smartwatch the morning after, so the form
-/// opens on **yesterday**; when yesterday already has a burn the default moves
-/// to **today** (nothing left to backfill). The date card opens a picker for
-/// any earlier day — a burn is never logged for a future day — and the
-/// 昨天/今天 shortcut switches between the two common cases without the picker.
+/// Exactly the day the 概览 day page was showing when its 记录运动 quick-add
+/// was tapped: the route pushes that date-only day key as `initialDay` (today's
+/// page included), so the burn lands on the day being viewed. A deep link
+/// without a day falls back to today. The date card opens a picker for any
+/// earlier day — a burn is never logged for a future day.
 ///
 /// An empty day is graceful: the readout shows the empty state and the field is
 /// simply blank.
@@ -51,9 +51,6 @@ const Key exerciseSelectedDateKey = Key('exercise_selected_date');
 /// Key of the readout of the selected day's stored burn.
 const Key exerciseDayValueKey = Key('exercise_day_value');
 
-/// Key of the 昨天/今天 shortcut.
-const Key exerciseDayShortcutKey = Key('exercise_day_shortcut');
-
 /// How far back the date picker lets the user backfill: one year of burn rows.
 const Duration exerciseHistoryWindow = Duration(days: 365);
 
@@ -81,12 +78,12 @@ class ExerciseEntryScreen extends ConsumerStatefulWidget {
   const ExerciseEntryScreen({super.key, this.initialDay});
 
   /// Optional explicit target day (a date-only day key), pushed as the route's
-  /// `extra` by a past-day page's quick-add.
+  /// `extra` by a day page's quick-add — today's page included.
   ///
-  /// When set, the form opens on exactly that day — not on the opening
-  /// default (yesterday, or today when yesterday is recorded) — so recording
-  /// from a browsed day lands on the day being viewed. The stored burn of
-  /// that day is loaded for editing as usual.
+  /// When set, the form edits exactly that day, so recording lands on the day
+  /// being viewed. Without it (a hand-typed deep link) the form falls back to
+  /// today. The stored burn of the selected day is loaded for editing as
+  /// usual.
   final DateTime? initialDay;
 
   @override
@@ -107,23 +104,19 @@ class _ExerciseEntryScreenState extends ConsumerState<ExerciseEntryScreen> {
   @override
   void initState() {
     super.initState();
-    // Re-apply the opening date default on every entry: an async read of
-    // yesterday's row decides between yesterday and today — unless the route
-    // carries an explicit day (a past-day page's quick-add), which wins.
-    // Riverpod forbids modifying a provider while the tree is building, so the
-    // reset/select is deferred by one microtask (it runs before the first
-    // frame the user can tap).
+    // Select the edited day on every entry: the pushed day, or today for a
+    // deep link without one. The today provider is re-invalidated first so the
+    // ambient clock is re-read (a cached key would pin an app kept alive
+    // overnight to the launch day). Riverpod forbids modifying a provider
+    // while the tree is building, so the select is deferred by one microtask
+    // (it runs before the first frame the user can tap); the date card reads
+    // 加载中… for that one frame instead of flashing a day.
     Future<void>.microtask(() {
       if (mounted) {
-        final ExerciseSelectedDay notifier = ref.read(
-          exerciseSelectedDayProvider.notifier,
-        );
-        final DateTime? day = widget.initialDay;
-        if (day == null) {
-          notifier.reset();
-        } else {
-          notifier.select(day);
-        }
+        ref.invalidate(exerciseDayKeyProvider);
+        ref
+            .read(exerciseSelectedDayProvider.notifier)
+            .select(widget.initialDay ?? ref.read(exerciseDayKeyProvider));
       }
     });
   }
@@ -175,7 +168,6 @@ class _ExerciseEntryScreenState extends ConsumerState<ExerciseEntryScreen> {
       });
     }
 
-    final DateTime yesterday = today.subtract(const Duration(days: 1));
     final bool editable = state.ready && !state.saving;
 
     return Scaffold(
@@ -190,35 +182,6 @@ class _ExerciseEntryScreenState extends ConsumerState<ExerciseEntryScreen> {
             loadFailed: state.loadFailed,
             kcal: state.kcal,
             onTap: state.saving || day == null ? null : _pickDate,
-          ),
-          const SizedBox(height: 12),
-          SegmentedButton<DateTime>(
-            key: exerciseDayShortcutKey,
-            showSelectedIcon: false,
-            emptySelectionAllowed: true,
-            segments: <ButtonSegment<DateTime>>[
-              ButtonSegment<DateTime>(
-                value: yesterday,
-                label: Text(strings.exerciseDayYesterday),
-              ),
-              ButtonSegment<DateTime>(
-                value: today,
-                label: Text(strings.exerciseDayToday),
-              ),
-            ],
-            selected: <DateTime>{
-              if (day == yesterday) yesterday else if (day == today) today,
-            },
-            onSelectionChanged: state.saving
-                ? null
-                : (Set<DateTime> selection) {
-                    if (selection.isEmpty) {
-                      return;
-                    }
-                    ref
-                        .read(exerciseSelectedDayProvider.notifier)
-                        .select(selection.first);
-                  },
           ),
           const SizedBox(height: 16),
           TextField(

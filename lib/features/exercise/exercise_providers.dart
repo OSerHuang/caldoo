@@ -5,13 +5,13 @@
 /// from `core/providers/app_providers.dart`. Tests override that port with the
 /// in-memory fake, so no database is opened under `flutter test`.
 ///
-/// ## Which day does the form open on?
+/// ## Which day does the form edit?
 ///
-/// Exercise is normally copied off a watch the morning after, so the form opens
-/// on **yesterday**. Once yesterday already has a burn there is nothing left to
-/// backfill, so the default moves to **today**. The user may still pick any
-/// earlier day from the screen's date picker (a future day records nothing and
-/// is not offered).
+/// The day the 概览 day page was showing when its quick-add was tapped: the
+/// route pushes that date-only day key and the screen edits exactly it. A deep
+/// link without a day falls back to today. Any earlier day remains reachable
+/// from the screen's date picker (a future day records nothing and is not
+/// offered).
 ///
 /// The daily budget is computed ONLY by the energy engine
 /// (`computeEnergyBudget`): the baseline is the resolved BMR (user override or
@@ -24,6 +24,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:caldoo/core/providers/app_providers.dart';
 import 'package:caldoo/core/time/date_windows.dart';
+import 'package:caldoo/core/time/day_tick_provider.dart';
 import 'package:caldoo/domain/models/daily_exercise.dart';
 
 /// The time seam; production reads the ambient [clock], tests fix it.
@@ -35,77 +36,32 @@ final exerciseOffsetProvider = Provider<LocalOffset>(
 );
 
 /// Today's date-only day key (`dayKeyOf(now, offset)`).
+///
+/// Re-derived on every [dayTickProvider] signal (app resume, the minute poll),
+/// like the other current-day seams: an app left open across midnight must not
+/// keep offering the launch day to the date picker or the no-day deep link.
 final exerciseDayKeyProvider = Provider<DateTime>((ref) {
+  ref.watch(dayTickProvider);
   final Clock clk = ref.watch(exerciseClockProvider);
   final LocalOffset offset = ref.watch(exerciseOffsetProvider);
   return dayKeyOf(clk.now(), offset);
 });
 
-/// Yesterday's date-only day key.
-final exerciseYesterdayKeyProvider = Provider<DateTime>(
-  (ref) => ref.watch(exerciseDayKeyProvider).subtract(const Duration(days: 1)),
-);
-
-/// The day the form opens on: yesterday, or today when yesterday is recorded.
-///
-/// The "already recorded" test is a synchronous point read of yesterday's row;
-/// an unreadable store (a corrupted or unavailable database) falls back to the
-/// documented yesterday default instead of blocking the form.
-final exerciseDefaultDayProvider = FutureProvider<DateTime>((ref) async {
-  final DateTime yesterday = ref.watch(exerciseYesterdayKeyProvider);
-  final DateTime today = ref.watch(exerciseDayKeyProvider);
-  try {
-    final DailyExercise? stored = await ref
-        .watch(exerciseRepositoryProvider)
-        .getDay(yesterday);
-    return stored != null && stored.kcal > 0 ? today : yesterday;
-  } catch (_) {
-    return yesterday;
-  }
-});
-
 /// The day currently being edited, as a date-only key.
 ///
-/// `null` while [exerciseDefaultDayProvider] resolves — the form waits for the
-/// answer rather than flashing one day and then the other.
+/// The screen selects the day explicitly on entry (the pushed day, or today
+/// for a deep link without one), so this is `null` only in the first frame
+/// before that selection lands — the form waits rather than flashing a day.
 final exerciseSelectedDayProvider =
     NotifierProvider<ExerciseSelectedDay, DateTime?>(ExerciseSelectedDay.new);
 
-/// Owns the edited day; re-applies the opening default when the screen enters.
+/// Owns the edited day; the screen selects it explicitly on every entry.
 class ExerciseSelectedDay extends Notifier<DateTime?> {
-  /// The user's explicit choice, if any. `null` means "still using the default".
-  DateTime? _picked;
-
   @override
-  DateTime? build() {
-    // Always watch the default: [reset] invalidates it and relies on this
-    // dependency to rebuild into the re-resolved day.
-    final AsyncValue<DateTime> initial = ref.watch(exerciseDefaultDayProvider);
-    final DateTime? picked = _picked;
-    if (picked != null) {
-      return picked;
-    }
-    return initial.isLoading ? null : initial.value;
-  }
+  DateTime? build() => null;
 
-  /// Selects [dayKey] explicitly (date picker or the 昨天/今天 shortcut).
-  void select(DateTime dayKey) {
-    _picked = dayKey;
-    state = dayKey;
-  }
-
-  /// Drops the explicit choice and re-reads the opening default.
-  ///
-  /// The screen calls this on entry, so a burn recorded for yesterday flips the
-  /// next visit to today exactly as the default rule describes. The clock is
-  /// re-read too: an app kept alive overnight must not keep resolving
-  /// "yesterday" against the day before.
-  void reset() {
-    _picked = null;
-    ref.invalidate(exerciseDayKeyProvider);
-    ref.invalidate(exerciseDefaultDayProvider);
-    state = null;
-  }
+  /// Selects [dayKey] as the day being edited (screen entry or date picker).
+  void select(DateTime dayKey) => state = dayKey;
 }
 
 /// The selected day's stored burn, live, tagged with the day it belongs to.
