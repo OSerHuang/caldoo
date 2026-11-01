@@ -121,6 +121,7 @@ class LabelCaptureState {
     this.drafts = const <LabelDraft>[],
     this.error,
     this.saved = const <Food>[],
+    this.editTarget,
   });
 
   final LabelStage stage;
@@ -143,11 +144,22 @@ class LabelCaptureState {
   /// The persisted foods, once [LabelStage.saved] is reached.
   final List<Food> saved;
 
+  /// The stored food being edited in place (the edit-nutrients flow), or
+  /// `null` in the normal capture flow.
+  ///
+  /// Only [startEdit] sets it and only [reset] clears it, so [copyWith] never
+  /// needs to null it out.
+  final Food? editTarget;
+
   /// `true` while the parse request is in flight.
   bool get parsing => stage == LabelStage.parsing;
 
   /// `true` when the confirm form (with the parsed values) is on screen.
   bool get confirming => stage == LabelStage.confirm;
+
+  /// `true` when the flow edits an existing food instead of capturing a new
+  /// one: the screen trims the photo/AI/batch affordances accordingly.
+  bool get editing => editTarget != null;
 
   /// `true` when at least one label draft is marked for saving.
   bool get hasIncludedDraft => drafts.any((LabelDraft draft) => draft.included);
@@ -159,6 +171,7 @@ class LabelCaptureState {
     List<LabelDraft>? drafts,
     String? error,
     List<Food>? saved,
+    Food? editTarget,
   }) {
     return LabelCaptureState(
       stage: stage ?? this.stage,
@@ -167,6 +180,7 @@ class LabelCaptureState {
       drafts: drafts ?? this.drafts,
       error: error,
       saved: saved ?? this.saved,
+      editTarget: editTarget ?? this.editTarget,
     );
   }
 }
@@ -288,6 +302,25 @@ class LabelCaptureController extends Notifier<LabelCaptureState> {
     seedDraft(LabelDraft(notes: state.extraNote.trim()));
   }
 
+  /// Seeds the confirm form with the stored values of [food] for an in-place
+  /// edit (the food detail page's 编辑数值 action).
+  ///
+  /// The save then replaces the same record ([FoodRepository.upsertFood] is a
+  /// full-row replace): id, source, aliases, servings, status and basis
+  /// survive from [food]; name / brand and the seven nutrients come from the
+  /// form, and a blank field clears the stored value to SQL NULL (no fake
+  /// zeros). The notes field is hidden in this mode — 备注 / 别名 / 份量 belong
+  /// to the notes editor — so nothing re-parses prose into structured
+  /// aliases here.
+  void startEdit(Food food) {
+    state = state.copyWith(
+      stage: LabelStage.confirm,
+      drafts: <LabelDraft>[LabelDraft.fromFood(food)],
+      editTarget: food,
+      error: null,
+    );
+  }
+
   /// Updates the [index]-th draft's display name.
   void updateName(int index, String name) =>
       _updateDraft(index, (LabelDraft draft) => draft.withName(name));
@@ -328,7 +361,12 @@ class LabelCaptureController extends Notifier<LabelCaptureState> {
     state = state.copyWith(drafts: drafts, error: null);
   }
 
-  /// Validates and persists every included draft as a `source: label` [Food].
+  /// Validates and persists the included drafts.
+  ///
+  /// In the capture flow every included draft becomes a `source: label` [Food]
+  /// with a fresh id; in the edit flow ([startEdit]) the single draft replaces
+  /// the stored record in place (same id and source; aliases / servings /
+  /// status / basis survive; a blank nutrient clears the stored value).
   ///
   /// Returns `true` on success. A blank name on an included label is a
   /// validation error (the plan forbids saving a label without user
@@ -356,9 +394,13 @@ class LabelCaptureController extends Notifier<LabelCaptureState> {
         return false;
       }
     }
+    final Food? target = state.editTarget;
     final List<Food> foods = <Food>[
-      for (final LabelDraft draft in included)
-        _foodFromDraft(draft, ref.read(labelIdGeneratorProvider)()),
+      if (target != null)
+        _foodFromEditDraft(included.first, target)
+      else
+        for (final LabelDraft draft in included)
+          _foodFromDraft(draft, ref.read(labelIdGeneratorProvider)()),
     ];
     try {
       for (final Food food in foods) {
@@ -389,6 +431,32 @@ class LabelCaptureController extends Notifier<LabelCaptureState> {
       aliases: _mergeAliases(draft.aliases, parseFoodAliases(notes)),
       servings: parseFoodServings(notes),
       source: FoodSource.label,
+      kcal: draft.energyKcal,
+      carbG: draft.carbohydrateG,
+      proteinG: draft.proteinG,
+      fatG: draft.fatG,
+      sugarG: draft.sugarG,
+      saturatedFatG: draft.saturatedFatG,
+      sodiumMg: draft.sodiumMg,
+    );
+  }
+
+  /// Builds the replacement [Food] for an edit: identity and the seven
+  /// nutrients come from the form, everything the form does not own (id,
+  /// source, aliases, servings, status, basis, notes, barcode) survives from
+  /// [original], and a blank nutrient clears its stored value.
+  Food _foodFromEditDraft(LabelDraft draft, Food original) {
+    return Food(
+      id: original.id,
+      name: draft.name.trim(),
+      brand: _blankToNull(draft.brand),
+      barcode: original.barcode,
+      aliases: original.aliases,
+      servings: original.servings,
+      status: original.status,
+      basis: original.basis,
+      notes: original.notes,
+      source: original.source,
       kcal: draft.energyKcal,
       carbG: draft.carbohydrateG,
       proteinG: draft.proteinG,

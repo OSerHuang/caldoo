@@ -619,6 +619,12 @@ class S {
   /// Label-capture app bar title when it was opened straight into manual entry.
   String get labelManualTitle => '手动录入';
 
+  /// Label-capture app bar title in the edit-nutrients flow (food detail page).
+  String get labelEditTitle => '编辑数值';
+
+  /// Confirmation-step hint in the edit-nutrients flow.
+  String get labelEditHint => '修改后保存，将直接更新这个食物（每 100 g / 100 mL）';
+
   /// Confirmation action on the saved step: returns to the food library.
   String get labelDoneAction => '完成';
 
@@ -918,6 +924,9 @@ class S {
 
   /// Detail app-bar action that opens the editor.
   String get foodEditAction => '编辑';
+
+  /// Detail-page action that opens the nutrient-value editor (编辑数值).
+  String get foodNutrientsEditAction => '编辑数值';
 
   /// Detail app-bar action that deletes the food from the catalogue.
   String get foodDeleteAction => '删除';

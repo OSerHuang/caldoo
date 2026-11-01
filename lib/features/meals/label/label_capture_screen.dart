@@ -36,6 +36,7 @@ import 'package:caldoo/core/providers/app_providers.dart'
     show isOfflineProvider;
 import 'package:caldoo/core/units/display_units.dart';
 import 'package:caldoo/core/units/nutrition_units.dart';
+import 'package:caldoo/domain/models/models.dart' show Food;
 import 'package:caldoo/features/offline/offline_ui.dart';
 import 'package:caldoo/l10n/app_format.dart';
 import 'package:caldoo/l10n/app_strings.dart';
@@ -90,13 +91,22 @@ Key labelSaltUnitKey(int index) => Key('label_salt_unit_$index');
 Key labelCardKey(int index) => Key('label_card_$index');
 
 class LabelCaptureScreen extends ConsumerStatefulWidget {
-  const LabelCaptureScreen({this.startManualEntry = false, super.key});
+  const LabelCaptureScreen({
+    this.startManualEntry = false,
+    this.editFood,
+    super.key,
+  });
 
   /// Opens the blank confirm form straight away instead of the photo step.
   ///
   /// Set by the 食物库's 添加食物 → 手动录入 entry; the normal photo path leaves
   /// it `false`.
   final bool startManualEntry;
+
+  /// Opens the confirm form pre-filled with this stored food for an in-place
+  /// edit of its nutrients (the food detail page's 编辑数值 action). The save
+  /// replaces the same record and pops back with the updated [Food].
+  final Food? editFood;
 
   @override
   ConsumerState<LabelCaptureScreen> createState() => _LabelCaptureScreenState();
@@ -126,7 +136,9 @@ class _LabelCaptureScreenState extends ConsumerState<LabelCaptureScreen> {
         labelCaptureControllerProvider.notifier,
       );
       controller.reset();
-      if (widget.startManualEntry) {
+      if (widget.editFood != null) {
+        controller.startEdit(widget.editFood!);
+      } else if (widget.startManualEntry) {
         controller.startManualEntry();
       }
     });
@@ -157,7 +169,15 @@ class _LabelCaptureScreenState extends ConsumerState<LabelCaptureScreen> {
     if (!mounted || !ok) {
       return;
     }
-    final int count = ref.read(labelCaptureControllerProvider).saved.length;
+    final LabelCaptureState state = ref.read(labelCaptureControllerProvider);
+    if (state.editing) {
+      // The detail page adopts the updated food from the pop result — the
+      // same return-adopt pattern as the notes editor. The saved stage is
+      // skipped: the record already lives behind this screen.
+      Navigator.of(context).maybePop(state.saved.single);
+      return;
+    }
+    final int count = state.saved.length;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -175,7 +195,9 @@ class _LabelCaptureScreenState extends ConsumerState<LabelCaptureScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          widget.startManualEntry
+          state.editing
+              ? S.of(context).labelEditTitle
+              : widget.startManualEntry
               ? S.of(context).labelManualTitle
               : S.of(context).labelTitle,
         ),
@@ -362,7 +384,9 @@ class _LabelCaptureScreenState extends ConsumerState<LabelCaptureScreen> {
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Text(
-                    count > 1
+                    state.editing
+                        ? S.of(context).labelEditHint
+                        : count > 1
                         ? S.of(context).labelRecognizedCount(count)
                         : S.of(context).labelConfirmHint,
                   ),
@@ -379,6 +403,7 @@ class _LabelCaptureScreenState extends ConsumerState<LabelCaptureScreen> {
                     hasPhoto: hasPhoto,
                     initialEnergyUnit: energyUnit,
                     initialSaltUnit: saltUnit,
+                    showSupplement: !state.editing,
                   ),
                 ),
               if (state.error != null)
@@ -496,6 +521,7 @@ class _LabelDraftCard extends ConsumerStatefulWidget {
     required this.hasPhoto,
     required this.initialEnergyUnit,
     required this.initialSaltUnit,
+    this.showSupplement = true,
   });
 
   final int index;
@@ -504,6 +530,12 @@ class _LabelDraftCard extends ConsumerStatefulWidget {
   /// Whether a photo exists (only then is the name helper about the AI guess
   /// accurate; manual entry has no photo to infer from).
   final bool hasPhoto;
+
+  /// Whether the capture-flow supplement surface (the notes field and the
+  /// include switch) is rendered. The edit-nutrients flow hides both: 备注 /
+  /// 别名 / 份量 belong to the notes editor, and a single card is always
+  /// included.
+  final bool showSupplement;
 
   /// The energy row's starting input unit: the display preference for manual
   /// entry, the printed kJ for a photo-confirmed label.
@@ -744,19 +776,21 @@ class _LabelDraftCardState extends ConsumerState<_LabelDraftCard> {
                     style: theme.textTheme.titleMedium,
                   ),
                 ),
-                Flexible(
-                  child: Text(
-                    S.of(context).labelInclude,
-                    style: theme.textTheme.bodySmall,
-                    textAlign: TextAlign.end,
+                if (widget.showSupplement) ...<Widget>[
+                  Flexible(
+                    child: Text(
+                      S.of(context).labelInclude,
+                      style: theme.textTheme.bodySmall,
+                      textAlign: TextAlign.end,
+                    ),
                   ),
-                ),
-                Switch(
-                  key: labelIncludeSwitchKey(widget.index),
-                  value: widget.draft.included,
-                  onChanged: (bool value) =>
-                      controller.setIncluded(widget.index, value),
-                ),
+                  Switch(
+                    key: labelIncludeSwitchKey(widget.index),
+                    value: widget.draft.included,
+                    onChanged: (bool value) =>
+                        controller.setIncluded(widget.index, value),
+                  ),
+                ],
               ],
             ),
             if (!widget.draft.included)
@@ -781,19 +815,21 @@ class _LabelDraftCardState extends ConsumerState<_LabelDraftCard> {
                   controller.updateName(widget.index, value),
             ),
             const SizedBox(height: 12),
-            TextField(
-              key: labelNotesFieldKey(widget.index),
-              controller: _notes,
-              minLines: 1,
-              maxLines: 2,
-              decoration: InputDecoration(
-                labelText: S.of(context).labelNotes,
-                hintText: S.of(context).labelNotesHint,
+            if (widget.showSupplement) ...<Widget>[
+              TextField(
+                key: labelNotesFieldKey(widget.index),
+                controller: _notes,
+                minLines: 1,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  labelText: S.of(context).labelNotes,
+                  hintText: S.of(context).labelNotesHint,
+                ),
+                onChanged: (String value) =>
+                    controller.updateNotes(widget.index, value),
               ),
-              onChanged: (String value) =>
-                  controller.updateNotes(widget.index, value),
-            ),
-            const SizedBox(height: 12),
+              const SizedBox(height: 12),
+            ],
             TextField(
               key: labelBrandFieldKey(widget.index),
               controller: _brand,

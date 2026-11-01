@@ -16,11 +16,14 @@
 /// The per-100 readouts are display-only, so they follow the display-unit
 /// preference (kcal/kJ, salt/sodium); the stored food values never change.
 ///
-/// Everything except the supplement is read-only: the user can open
-/// [SavedFoodNotesScreen] to add or update 补充信息 (aliases, package size,
-/// per-piece weight, remarks, active/archived, per-100 g / ml), optionally
-/// letting the AI merge the typed remarks. Nutrient values, name and brand stay
-/// untouched here, so this screen can never corrupt an authoritative label.
+/// Everything except the supplement is read-only **on this page**: the user
+/// can open [SavedFoodNotesScreen] to add or update 补充信息 (aliases, package
+/// size, per-piece weight, remarks, active/archived, per-100 g / ml), and the
+/// label confirm form in edit mode ([LabelCaptureScreen] with [LabelCaptureScreen.editFood])
+/// to correct the nutrient values themselves — a label misread by the AI or a
+/// typo in a manual entry no longer forces a delete-and-recapture. Edits
+/// affect only meals logged afterwards: a logged meal item is a snapshot that
+/// survives unchanged (the meal_items contract).
 ///
 /// The app bar also carries the catalogue's delete action: a confirm dialog
 /// (the food leaves the 食物库; logged meal items survive by contract) and the
@@ -39,6 +42,7 @@ import 'package:caldoo/core/units/display_units.dart';
 import 'package:caldoo/domain/models/models.dart';
 import 'package:caldoo/domain/services/label_priority.dart'
     show foodAliases, foodServings;
+import 'package:caldoo/features/meals/label/label_capture_screen.dart';
 import 'package:caldoo/l10n/app_format.dart';
 import 'package:caldoo/l10n/app_strings.dart';
 
@@ -57,6 +61,11 @@ const Key savedFoodDetailBrandKey = Key('saved_food_detail_brand');
 
 /// Key of the action that opens the supplement editor.
 const Key savedFoodDetailNotesEditKey = Key('saved_food_detail_notes_edit');
+
+/// Key of the action that opens the nutrient-value editor.
+const Key savedFoodDetailNutrientsEditKey = Key(
+  'saved_food_detail_nutrients_edit',
+);
 
 /// Key of the app-bar delete action.
 const Key savedFoodDetailDeleteKey = Key('saved_food_detail_delete');
@@ -117,6 +126,24 @@ class _SavedFoodDetailScreenState extends ConsumerState<SavedFoodDetailScreen> {
   /// Opens the supplement editor and adopts the saved result.
   Future<void> _editNotes() async {
     final Food? updated = await SavedFoodNotesScreen.push(context, _food);
+    if (updated == null || !mounted) {
+      return;
+    }
+    setState(() => _food = updated);
+  }
+
+  /// Opens the nutrient-value editor (the label confirm form in edit mode) and
+  /// adopts the saved result.
+  ///
+  /// Same root [Navigator] as [SavedFoodNotesScreen.push]: the detail page
+  /// itself lives on the root navigator, so the editor must stack on top of it
+  /// (a go_router push would land on the shell branch beneath this page).
+  Future<void> _editNutrients() async {
+    final Food? updated = await Navigator.of(context).push<Food>(
+      MaterialPageRoute<Food>(
+        builder: (BuildContext context) => LabelCaptureScreen(editFood: _food),
+      ),
+    );
     if (updated == null || !mounted) {
       return;
     }
@@ -201,6 +228,12 @@ class _SavedFoodDetailScreenState extends ConsumerState<SavedFoodDetailScreen> {
             onPressed: _confirmDelete,
             color: theme.colorScheme.error,
             icon: const Icon(Icons.delete_outline),
+          ),
+          TextButton.icon(
+            key: savedFoodDetailNutrientsEditKey,
+            onPressed: _editNutrients,
+            icon: const Icon(Icons.edit_note_outlined),
+            label: Text(strings.foodNutrientsEditAction),
           ),
           TextButton.icon(
             key: savedFoodDetailNotesEditKey,

@@ -13,6 +13,9 @@ import 'package:caldoo/core/providers/app_providers.dart'
     show foodRepositoryProvider;
 import 'package:caldoo/core/units/display_units.dart';
 import 'package:caldoo/domain/models/models.dart';
+import 'package:caldoo/features/meals/label/label_capture_screen.dart'
+    show labelFieldKey, labelNameFieldKey, labelNotesFieldKey;
+import 'package:caldoo/features/meals/label/label_draft.dart' show LabelField;
 import 'package:caldoo/features/meals/saved_foods/saved_food_detail_screen.dart';
 import 'package:caldoo/features/meals/saved_foods/saved_food_notes_screen.dart';
 
@@ -331,7 +334,43 @@ void supplementTests() {
     // The authoritative nutrient values are untouched by the identity edit.
     expect(_text(tester, savedFoodDetailValueKey('kcal')), '200');
   });
+
+  testWidgets('the 编辑数值 action opens the nutrient editor and adopts the '
+      'result', (WidgetTester tester) async {
+    final FakeFoodRepository repo = await _pumpDetailPushed(tester, labelMilk);
+
+    await _tap(tester, find.byKey(savedFoodDetailNutrientsEditKey));
+
+    // The label confirm form, pre-filled with the stored food and showing the
+    // edit copy; the notes field and include switch are capture-only.
+    expect(find.text('编辑数值'), findsOneWidget);
+    expect(find.text('修改后保存，将直接更新这个食物（每 100 g / 100 mL）'), findsOneWidget);
+    expect(_field(tester, labelNameFieldKey(0)), '全脂牛奶');
+    expect(_field(tester, labelFieldKey(0, LabelField.energy)), '200');
+    expect(find.byKey(labelNotesFieldKey(0)), findsNothing);
+
+    // Correct the energy to 180 kcal and save.
+    await tester.enterText(
+      find.byKey(labelFieldKey(0, LabelField.energy)),
+      '180',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('label_save_button')));
+    await tester.pumpAndSettle();
+
+    // Back on the detail page with the adopted update, repository updated in
+    // place (same id, no duplicate).
+    expect(find.byKey(savedFoodDetailScreenKey), findsOneWidget);
+    expect(_text(tester, savedFoodDetailValueKey('kcal')), '180');
+    final Food? stored = await repo.getFood(labelMilk.id);
+    expect(stored!.kcal, 180);
+    expect(await repo.getAllFoods(), hasLength(1));
+  });
 }
+
+/// Reads a text field's current controller text (the displayed value).
+String _field(WidgetTester tester, Key key) =>
+    tester.widget<TextField>(find.byKey(key)).controller!.text;
 
 /// Widget tests for the food-library delete action (the app-bar 删除 icon on
 /// the detail page): the confirm dialog is mandatory, cancelling keeps the

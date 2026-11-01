@@ -112,6 +112,7 @@ void main() {
     String? body,
     LabelPhotoSource? source,
     bool startManualEntry = false,
+    Food? editFood,
   }) async {
     if (body != null) {
       final ({AiClient client, Dio dio}) rewired = _fixtureClient(body);
@@ -137,7 +138,10 @@ void main() {
           ),
         ],
         child: MaterialApp(
-          home: LabelCaptureScreen(startManualEntry: startManualEntry),
+          home: LabelCaptureScreen(
+            startManualEntry: startManualEntry,
+            editFood: editFood,
+          ),
         ),
       ),
     );
@@ -654,4 +658,72 @@ void main() {
       expect(parse.labels.first.foodName, '乐事原味薯片');
     },
   );
+
+  group('edit-nutrients flow (食物详情的编辑数值)', () {
+    const Food original = Food(
+      id: 'food-edit-1',
+      name: '全麦面包',
+      brand: '某品牌',
+      source: FoodSource.label,
+      kcal: 200,
+      carbG: 40,
+      proteinG: 8,
+      fatG: 2,
+      sodiumMg: 400,
+    );
+
+    testWidgets('the form seeds from the stored food and trims capture UI', (
+      WidgetTester tester,
+    ) async {
+      await pumpFlow(tester, editFood: original);
+
+      // Capture affordances are gone: no photo step, no notes field, no
+      // include switch; the edit copy replaces the capture hint.
+      expect(find.byKey(const Key('label_pick_button')), findsNothing);
+      expect(find.byKey(labelNotesFieldKey(0)), findsNothing);
+      expect(find.byKey(labelIncludeSwitchKey(0)), findsNothing);
+      expect(find.text('编辑数值'), findsOneWidget);
+      expect(find.text('修改后保存，将直接更新这个食物（每 100 g / 100 mL）'), findsOneWidget);
+
+      // Identity and nutrients seeded from the stored food: energy re-rounds
+      // losslessly to the stored whole kcal in the display (kcal) unit, and
+      // 400 mg sodium renders as 5 g salt.
+      expect(_fieldText(tester, labelNameFieldKey(0)), '全麦面包');
+      expect(_fieldText(tester, labelBrandFieldKey(0)), '某品牌');
+      expect(_fieldText(tester, labelFieldKey(0, LabelField.energy)), '200');
+      expect(_fieldText(tester, labelFieldKey(0, LabelField.protein)), '8');
+      expect(_fieldText(tester, labelFieldKey(0, LabelField.sodium)), '1');
+    });
+
+    testWidgets('saving replaces the same record: id and source survive, '
+        'a blank field clears the stored value', (WidgetTester tester) async {
+      await pumpFlow(tester, editFood: original);
+
+      // Correct the energy (typed in the display kcal unit) and clear protein.
+      await tester.enterText(
+        find.byKey(labelFieldKey(0, LabelField.energy)),
+        '250',
+      );
+      await tester.pump();
+      await tester.enterText(
+        find.byKey(labelFieldKey(0, LabelField.protein)),
+        '',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('label_save_button')));
+      await tester.pumpAndSettle();
+
+      // Updated in place — no duplicate food, provenance kept.
+      final List<Food> foods = await repo.getAllFoods();
+      expect(foods, hasLength(1));
+      final Food saved = foods.single;
+      expect(saved.id, 'food-edit-1');
+      expect(saved.source, FoodSource.label);
+      expect(saved.kcal, 250);
+      expect(saved.proteinG, isNull);
+      expect(saved.carbG, 40);
+      expect(saved.name, '全麦面包');
+      expect(saved.brand, '某品牌');
+    });
+  });
 }

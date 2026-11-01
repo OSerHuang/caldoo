@@ -16,7 +16,8 @@ UI is Chinese-only.)
   type is editable). An AI failure never blocks saving
 - **Food library**: photograph a printed nutrition label to create a food
   entry (one photo may contain several labels); every food is searchable and
-  reusable
+  reusable, and nutrient values are editable anytime (logged meals keep their
+  recorded numbers)
 - **Overview**: daily / weekly / monthly energy and salt, swipe through
   history; daily exercise burn is entered manually
 - **Local data + auto backup**: all records stay on the device and are
