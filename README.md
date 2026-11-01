@@ -1,6 +1,7 @@
 # 卡嘟 (CalDoo)
 
 [![CI](https://github.com/OSerHuang/caldoo/actions/workflows/ci.yml/badge.svg)](https://github.com/OSerHuang/caldoo/actions/workflows/ci.yml)
+[![coverage](https://raw.githubusercontent.com/OSerHuang/caldoo/badges/coverage.svg)](https://github.com/OSerHuang/caldoo/actions/workflows/ci.yml)
 
 [English](README.en.md) | 简体中文
 
