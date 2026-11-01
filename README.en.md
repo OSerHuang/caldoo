@@ -20,7 +20,7 @@ UI is Chinese-only.)
 - **Overview**: daily / weekly / monthly energy and salt, swipe through
   history; daily exercise burn is entered manually
 - **Local data + auto backup**: all records stay on the device and are
-  automatically backed up to the public folder `下载/caldoo/` (newest 10
+  automatically backed up to the public folder `Download/caldoo/` (newest 10
   kept); restore under Profile → Data backup. When updating, install over the
   existing app — never uninstall first (that wipes the data)
 - **Display units**: kcal↔kJ and salt↔sodium, switchable anytime, display only

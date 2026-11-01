@@ -4,7 +4,7 @@
 /// MethodChannel (implemented in
 /// `android/app/src/main/kotlin/com/caldoo/AutoBackupChannel.kt`).
 ///
-/// The channel writes to the PUBLIC downloads area (`下载/caldoo/`,
+/// The channel writes to the PUBLIC downloads area (`Download/caldoo/`,
 /// via `MediaStore` on Android 10+) rather than to the app's own directory,
 /// because an uninstall deletes everything the app owns — including its
 /// private files directory. A document in the public downloads area survives

@@ -1155,7 +1155,7 @@ class S {
 
   /// Automatic-backup explanation paragraph.
   static const String autoBackupIntroConst =
-      '每次打开或离开 App，都会自动把整份数据另存到「下载 / caldoo」，'
+      '每次打开或离开 App，都会自动把整份数据另存到「Download/caldoo」，'
       '保留最近 10 份。它不在 App 私有目录里，所以卸载或清空 App 数据后依然保留，'
       '重装后可从这里或「从文件导入」恢复。';
 
@@ -1166,7 +1166,7 @@ class S {
   String get autoBackupToggle => '开启自动备份';
 
   /// Where the copies live, shown under the toggle.
-  static const String autoBackupLocationConst = '文件位置：文件管理 → 下载 → caldoo';
+  static const String autoBackupLocationConst = '文件位置：Download/caldoo';
 
   /// Where the copies live, shown under the toggle.
   String get autoBackupLocation => autoBackupLocationConst;
