@@ -371,18 +371,16 @@ void main() {
     // alone, wiping dailyKcalGoalOverride on every 资料页保存.
     final FakeProfileRepository repo = FakeProfileRepository();
     addTearDown(repo.dispose);
-    await repo.saveProfile(
-      _autoProfile.copyWith(dailyKcalGoalOverride: 1399),
-    );
+    await repo.saveProfile(_autoProfile.copyWith(dailyKcalGoalOverride: 1399));
     await _pumpProfile(tester, repo);
 
     // The goal card shows the stored goal (and so does the 基础额度 card —
     // with a goal set the baseline IS the goal).
     expect(find.byKey(const Key('profile_daily_goal')), findsOneWidget);
     expect(
-      tester.widget<Text>(
-        find.byKey(const Key('profile_daily_goal_value')),
-      ).data,
+      tester
+          .widget<Text>(find.byKey(const Key('profile_daily_goal_value')))
+          .data,
       '1399 kcal',
     );
 

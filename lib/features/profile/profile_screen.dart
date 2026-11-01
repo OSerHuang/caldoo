@@ -292,7 +292,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     // weight and the BMR override. Every other profile field (the daily goal
     // above all) is carried over from the stored row verbatim, so saving the
     // form can never wipe something this screen does not edit.
-    final int? storedGoal = ref.read(storedProfileProvider).value
+    final int? storedGoal = ref
+        .read(storedProfileProvider)
+        .value
         ?.dailyKcalGoalOverride;
     await ref
         .read(profileRepositoryProvider)
