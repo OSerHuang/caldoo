@@ -20,6 +20,13 @@ UI is Chinese-only.)
   recomputed from the new values in one step
 - **Overview**: daily / weekly / monthly energy and salt, swipe through
   history; daily exercise burn is entered manually
+- **Daily energy goal**: set it under Profile → Daily energy goal (presets or
+  a custom number); the daily budget = goal + exercise, the ring's deficit /
+  surplus is labeled relative to that budget, and the week / month summaries
+  report goal-adherent days
+- **Weight history**: the weight card on today's Overview, the weight line
+  block in the week / month views, and a full trend page; recording a weight
+  syncs the profile's weight so the basal metabolism follows
 - **Local data + auto backup**: all records stay on the device and are
   automatically backed up to the public folder `Download/caldoo/` (newest 10
   kept); restore under Profile → Data backup. When updating, install over the
