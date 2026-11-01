@@ -13,7 +13,7 @@
 # So this script always:
 #   1. builds the release APK explicitly (never installs a stale artifact),
 #   2. checks that the device holds a recent automatic backup
-#      (下载/卡嘟备份 in the file manager; the app writes one on launch and
+#      (下载/caldoo in the file manager; the app writes one on launch and
 #      on every background transition) and refuses to continue without one,
 #   3. installs with `adb install -r`, which OVERWRITES and keeps app data.
 #
@@ -30,7 +30,7 @@ set -euo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 APP_ID="com.caldoo"
-BACKUP_DIR="/sdcard/Download/卡嘟备份"
+BACKUP_DIR="/sdcard/Download/caldoo"
 APK="build/app/outputs/flutter-apk/app-release.apk"
 ADB="${ADB:-adb}"
 DEVICE_ARGS=()

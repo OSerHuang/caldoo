@@ -31,6 +31,7 @@ import 'package:flutter/foundation.dart';
 
 import 'package:caldoo/ai/schemas/label_parse.dart';
 import 'package:caldoo/core/units/nutrition_units.dart';
+import 'package:caldoo/domain/models/models.dart' show Food;
 import 'package:caldoo/l10n/app_strings.dart';
 
 /// One nutrient row the confirm form renders.
@@ -121,6 +122,28 @@ class LabelDraft {
       carbohydrateG: parse.carbohydrateG,
       sugarG: parse.sugarG,
       sodiumMg: parse.sodiumMg,
+    );
+  }
+
+  /// Seeds a draft from an already-saved [Food] (the edit-nutrients flow).
+  ///
+  /// The form's energy field speaks kJ, so the stored whole-kcal value is
+  /// converted back with [kcalToKJ] — and because [energyKcal] re-rounds
+  /// through [kJToKcal], the round trip is lossless for the canonical value.
+  /// Blank nutrients stay blank ([Food] stores no fake zeros either); identity
+  /// extras the form does not own (aliases, servings, status, basis) are not
+  /// carried — the edit save re-applies them from the original [Food].
+  factory LabelDraft.fromFood(Food food) {
+    return LabelDraft(
+      name: food.name,
+      brand: food.brand ?? '',
+      energyKj: food.kcal == null ? null : kcalToKJ(food.kcal!),
+      proteinG: food.proteinG,
+      fatG: food.fatG,
+      saturatedFatG: food.saturatedFatG,
+      carbohydrateG: food.carbG,
+      sugarG: food.sugarG,
+      sodiumMg: food.sodiumMg,
     );
   }
 

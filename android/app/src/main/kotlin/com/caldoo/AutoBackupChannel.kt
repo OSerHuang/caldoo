@@ -19,12 +19,12 @@ import java.util.concurrent.Executors
 /**
  * The platform half of the automatic off-app backup.
  *
- * Writes the backup JSON to the PUBLIC downloads area, `下载/卡嘟备份/`,
+ * Writes the backup JSON to the PUBLIC downloads area, `下载/caldoo/`,
  * never to the app's own storage: an uninstall deletes everything the app
  * owns, and surviving an uninstall is the whole point of this channel.
  *
  * * Android 10+ (`MediaStore.Downloads`): no permission needed. The documents
- *   appear in 文件管理 → 下载 → 卡嘟备份 and survive an uninstall.
+ *   appear in 文件管理 → 下载 → caldoo and survive an uninstall.
  * * Android 9 and below: no scoped-storage exemption is available without the
  *   legacy WRITE_EXTERNAL_STORAGE runtime permission, so the copy goes to the
  *   app-specific external downloads directory instead (no permission; visible
@@ -40,7 +40,7 @@ class AutoBackupChannel(private val activity: Activity) {
         const val CHANNEL = "caldoo/auto_backup"
 
         /** Folder shown to the user under 下载. */
-        private const val FOLDER = "卡嘟备份"
+        private const val FOLDER = "caldoo"
         private const val MIME_JSON = "application/json"
         private const val NAME_COLUMN = MediaStore.MediaColumns.DISPLAY_NAME
         private const val SIZE_COLUMN = MediaStore.MediaColumns.SIZE

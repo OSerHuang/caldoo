@@ -58,7 +58,7 @@ void main() {
 
   test('requires a fresh automatic backup before touching the device', () {
     expect(script, contains('ALLOW_NO_BACKUP'));
-    expect(script, contains('Download/卡嘟备份'));
+    expect(script, contains('Download/caldoo'));
     expect(
       script,
       contains('1440'),
