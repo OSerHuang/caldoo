@@ -797,6 +797,30 @@ void runMealRepositorySuite({
       ]);
     },
   );
+
+  test('getMealsWithItemsForFood returns the COMPLETE item lists of the '
+      'meals that link the food', () async {
+    // m1 links the food AND carries a sibling item: the recompute flow
+    // rewrites meals wholesale, so the sibling must come back too.
+    await meals.saveMealWithItems(mealFixture(id: 'm1'), <MealItem>[
+      itemFixture(id: 'i1', foodId: 'food-x', grams: 50),
+      itemFixture(id: 'i2', name: '鸡蛋', grams: 60),
+    ]);
+    await meals.saveMealWithItems(
+      mealFixture(id: 'm2', timestamp: DateTime(2026, 9, 20, 9)),
+      <MealItem>[itemFixture(id: 'i3', foodId: 'food-x', grams: 30)],
+    );
+    await meals.saveMealWithItems(mealFixture(id: 'm3'), <MealItem>[
+      itemFixture(id: 'i4', name: '无关食物'),
+    ]);
+
+    final result = await meals.getMealsWithItemsForFood('food-x');
+
+    // m3 has no link and is out; ordering is by meal timestamp (m2 first).
+    expect(result.map((e) => e.meal.id), ['m2', 'm1']);
+    expect(result[0].items.map((i) => i.id), ['i3']);
+    expect(result[1].items.map((i) => i.id), ['i1', 'i2']);
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -928,6 +928,21 @@ class S {
   /// Detail-page action that opens the nutrient-value editor (编辑数值).
   String get foodNutrientsEditAction => '编辑数值';
 
+  /// Detail-page dialog title: offer to recompute logged records after a
+  /// nutrient edit.
+  String get foodRecomputeTitle => '重算历史记录？';
+
+  /// Body of the recompute dialog: how many logged items across how many
+  /// meals would be recomputed.
+  String foodRecomputeBody(int items, int meals) =>
+      '这个食物有 $items 条已记录的摄入（跨 $meals 餐），按刚保存的数值一并重算？';
+
+  /// Confirm action of the recompute dialog.
+  String get foodRecomputeConfirm => '重算';
+
+  /// Snackbar after the batch recompute.
+  String foodRecomputeSnack(int items) => '已重算 $items 条记录';
+
   /// Detail app-bar action that deletes the food from the catalogue.
   String get foodDeleteAction => '删除';
 

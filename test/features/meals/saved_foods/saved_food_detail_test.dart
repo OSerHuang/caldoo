@@ -10,8 +10,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:caldoo/core/providers/app_providers.dart'
-    show foodRepositoryProvider;
+    show foodRepositoryProvider, mealRepositoryProvider;
 import 'package:caldoo/core/units/display_units.dart';
+import 'package:caldoo/core/time/date_windows.dart' show MealWithItems;
 import 'package:caldoo/domain/models/models.dart';
 import 'package:caldoo/features/meals/label/label_capture_screen.dart'
     show labelFieldKey, labelNameFieldKey, labelNotesFieldKey;
@@ -365,6 +366,158 @@ void supplementTests() {
     final Food? stored = await repo.getFood(labelMilk.id);
     expect(stored!.kcal, 180);
     expect(await repo.getAllFoods(), hasLength(1));
+  });
+
+  testWidgets('after a nutrient edit the recompute dialog offers to update '
+      'logged records, and 重算 applies them', (WidgetTester tester) async {
+    final FakeFoodRepository foodRepo = FakeFoodRepository();
+    await foodRepo.insertFood(labelMilk);
+    final FakeMealRepository mealRepo = FakeMealRepository();
+    // One logged item linked to the milk: 50 g recorded from the OLD values.
+    await mealRepo.saveMealWithItems(
+      Meal(
+        id: 'meal-milk',
+        timestamp: DateTime(2026, 11, 1, 11),
+        mealType: MealType.lunch,
+      ),
+      const <MealItem>[
+        MealItem(
+          id: 'meal-item-milk',
+          foodId: 'food-label-milk',
+          name: '全脂牛奶',
+          grams: 50,
+          kcal: 145,
+          carbG: 10.25,
+          proteinG: 11.5,
+          fatG: 8,
+          saltG: 0,
+          source: FoodSource.label,
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          foodRepositoryProvider.overrideWithValue(foodRepo),
+          mealRepositoryProvider.overrideWithValue(mealRepo),
+        ],
+        child: MaterialApp(
+          home: Builder(
+            builder: (BuildContext context) => Scaffold(
+              body: Center(
+                child: TextButton(
+                  onPressed: () =>
+                      SavedFoodDetailScreen.push(context, labelMilk),
+                  child: const Text('食物库'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('食物库'));
+    await tester.pumpAndSettle();
+
+    await _tap(tester, find.byKey(savedFoodDetailNutrientsEditKey));
+    // The editor is prefilled; correct the energy to 300 kcal and save.
+    await tester.enterText(
+      find.byKey(labelFieldKey(0, LabelField.energy)),
+      '300',
+    );
+    await tester.pump();
+    await _tap(tester, find.byKey(const Key('label_save_button')));
+
+    // The offer names the counts: 1 logged item across 1 meal.
+    expect(find.byKey(savedFoodRecomputeDialogKey), findsOneWidget);
+    expect(find.text('重算历史记录？'), findsOneWidget);
+    expect(find.text('这个食物有 1 条已记录的摄入（跨 1 餐），按刚保存的数值一并重算？'), findsOneWidget);
+
+    await _tap(tester, find.byKey(savedFoodRecomputeConfirmKey));
+
+    // Applied: the logged item was recomputed at its own grams
+    // (300 kcal / 100 g × 50 g), macros and salt alike.
+    expect(find.text('已重算 1 条记录'), findsOneWidget);
+    final MealWithItems meal = (await mealRepo
+        .watchMealWithItems('meal-milk')
+        .first)!;
+    final MealItem item = meal.items.single;
+    expect(item.kcal, 150);
+    expect(item.carbG, 10.0);
+    expect(item.proteinG, 5.0);
+    expect(item.fatG, 2.5);
+    expect(item.saltG, 0.25);
+  });
+
+  testWidgets('keeping the records untouched leaves logged items alone', (
+    WidgetTester tester,
+  ) async {
+    final FakeFoodRepository foodRepo = FakeFoodRepository();
+    await foodRepo.insertFood(labelMilk);
+    final FakeMealRepository mealRepo = FakeMealRepository();
+    await mealRepo.saveMealWithItems(
+      Meal(
+        id: 'meal-milk',
+        timestamp: DateTime(2026, 11, 1, 11),
+        mealType: MealType.lunch,
+      ),
+      const <MealItem>[
+        MealItem(
+          id: 'meal-item-milk',
+          foodId: 'food-label-milk',
+          name: '全脂牛奶',
+          grams: 50,
+          kcal: 145,
+          carbG: 10.25,
+          proteinG: 11.5,
+          fatG: 8,
+          saltG: 0,
+          source: FoodSource.label,
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          foodRepositoryProvider.overrideWithValue(foodRepo),
+          mealRepositoryProvider.overrideWithValue(mealRepo),
+        ],
+        child: MaterialApp(
+          home: Builder(
+            builder: (BuildContext context) => Scaffold(
+              body: Center(
+                child: TextButton(
+                  onPressed: () =>
+                      SavedFoodDetailScreen.push(context, labelMilk),
+                  child: const Text('食物库'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('食物库'));
+    await tester.pumpAndSettle();
+
+    await _tap(tester, find.byKey(savedFoodDetailNutrientsEditKey));
+    await tester.enterText(
+      find.byKey(labelFieldKey(0, LabelField.energy)),
+      '300',
+    );
+    await tester.pump();
+    await _tap(tester, find.byKey(const Key('label_save_button')));
+    expect(find.byKey(savedFoodRecomputeDialogKey), findsOneWidget);
+
+    // 保持原样: the logged item keeps its recorded snapshot.
+    await _tap(tester, find.byKey(savedFoodRecomputeCancelKey));
+    expect(find.byKey(savedFoodRecomputeDialogKey), findsNothing);
+    final MealItem item =
+        (await mealRepo.watchMealWithItems('meal-milk').first)!.items.single;
+    expect(item.kcal, 145);
+    expect(item.carbG, 10.25);
   });
 }
 

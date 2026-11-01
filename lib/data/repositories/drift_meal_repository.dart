@@ -128,6 +128,22 @@ class DriftMealRepository implements MealRepository {
     });
   }
 
+  @override
+  Future<List<MealWithItems>> getMealsWithItemsForFood(String foodId) async {
+    final mealIds = await _db.mealDao.getMealIdsForFood(foodId);
+    final meals = <MealWithItems>[];
+    for (final String id in mealIds) {
+      final mealRow = await _db.mealDao.getMeal(id);
+      if (mealRow == null) {
+        continue; // raced with a delete; nothing to recompute there anymore
+      }
+      final itemRows = await _db.mealDao.getItemsForMeal(id);
+      meals.add(mealWithItemsFromRows((meal: mealRow, items: itemRows)));
+    }
+    meals.sort((a, b) => a.meal.timestamp.compareTo(b.meal.timestamp));
+    return meals;
+  }
+
   /// The owning meal id comes from the [Meal] argument: a domain [MealItem]
   /// carries no `mealId`, the repository is what knows the parent.
   MealItemsCompanion _itemCompanion(String mealId, MealItem item) {

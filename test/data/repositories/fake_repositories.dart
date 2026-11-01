@@ -195,6 +195,17 @@ class FakeMealRepository implements MealRepository {
   }
 
   @override
+  Future<List<MealWithItems>> getMealsWithItemsForFood(String foodId) async {
+    final meals = <MealWithItems>[
+      for (final MapEntry<String, List<MealItem>> entry in _itemsByMeal.entries)
+        if (entry.value.any((MealItem item) => item.foodId == foodId))
+          (meal: _meals[entry.key]!, items: List<MealItem>.of(entry.value)),
+    ];
+    meals.sort((a, b) => a.meal.timestamp.compareTo(b.meal.timestamp));
+    return meals;
+  }
+
+  @override
   Future<void> deleteMeal(String id) async {
     final items = _itemsByMeal.remove(id);
     if (items == null && !_meals.containsKey(id)) {

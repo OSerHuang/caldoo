@@ -47,6 +47,10 @@ class RecordingMealRepository implements MealRepository {
   }
 
   @override
+  Future<List<MealWithItems>> getMealsWithItemsForFood(String foodId) async =>
+      const <MealWithItems>[];
+
+  @override
   Future<void> deleteMeal(String id) async {}
 
   @override

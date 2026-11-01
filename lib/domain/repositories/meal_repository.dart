@@ -79,4 +79,12 @@ abstract interface class MealRepository {
   /// state instead of a stale card. Items are ordered by id, matching the
   /// window queries.
   Stream<MealWithItems?> watchMealWithItems(String id);
+
+  /// Meals **with their complete item lists** that contain at least one item
+  /// linked to [foodId], ordered by timestamp.
+  ///
+  /// The read behind the food-detail "recompute history" flow: the caller
+  /// rewrites each affected meal wholesale via [updateMealWithItems], so every
+  /// meal carries ALL of its items — not only the ones linked to [foodId].
+  Future<List<MealWithItems>> getMealsWithItemsForFood(String foodId);
 }

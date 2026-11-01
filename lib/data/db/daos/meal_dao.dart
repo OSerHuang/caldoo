@@ -112,6 +112,16 @@ class MealDao extends DatabaseAccessor<AppDatabase> with _$MealDaoMixin {
     return query.watch();
   }
 
+  /// Distinct ids of the meals that contain an item linked to [foodId]
+  /// (`meal_items.food_id` is a back-link, not a foreign key).
+  Future<List<String>> getMealIdsForFood(String foodId) async {
+    final query = selectOnly(mealItems)
+      ..addColumns([mealItems.mealId])
+      ..where(mealItems.foodId.equals(foodId));
+    final rows = await query.get();
+    return <String>[for (final row in rows) row.read(mealItems.mealId)!];
+  }
+
   /// Writes [meal] and its [items] in one transaction, so a `watch` stream
   /// never observes a half-saved meal (task 22's save path).
   Future<void> saveMealWithItems({

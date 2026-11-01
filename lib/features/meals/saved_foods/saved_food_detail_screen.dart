@@ -35,11 +35,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:caldoo/core/providers/app_providers.dart'
-    show foodRepositoryProvider;
+    show foodRepositoryProvider, mealRepositoryProvider;
 import 'package:caldoo/core/theme/app_dimensions.dart';
+import 'package:caldoo/core/time/date_windows.dart' show MealWithItems;
 import 'package:caldoo/core/ui/app_card.dart';
 import 'package:caldoo/core/units/display_units.dart';
 import 'package:caldoo/domain/models/models.dart';
+import 'package:caldoo/domain/services/food_history.dart'
+    show recomputeHistoryForFood;
 import 'package:caldoo/domain/services/label_priority.dart'
     show foodAliases, foodServings;
 import 'package:caldoo/features/meals/label/label_capture_screen.dart';
@@ -66,6 +69,15 @@ const Key savedFoodDetailNotesEditKey = Key('saved_food_detail_notes_edit');
 const Key savedFoodDetailNutrientsEditKey = Key(
   'saved_food_detail_nutrients_edit',
 );
+
+/// Key of the recompute-history confirmation dialog.
+const Key savedFoodRecomputeDialogKey = Key('saved_food_recompute_dialog');
+
+/// Key of the recompute dialog's cancel button.
+const Key savedFoodRecomputeCancelKey = Key('saved_food_recompute_cancel');
+
+/// Key of the recompute dialog's confirm button.
+const Key savedFoodRecomputeConfirmKey = Key('saved_food_recompute_confirm');
 
 /// Key of the app-bar delete action.
 const Key savedFoodDetailDeleteKey = Key('saved_food_detail_delete');
@@ -138,6 +150,9 @@ class _SavedFoodDetailScreenState extends ConsumerState<SavedFoodDetailScreen> {
   /// Same root [Navigator] as [SavedFoodNotesScreen.push]: the detail page
   /// itself lives on the root navigator, so the editor must stack on top of it
   /// (a go_router push would land on the shell branch beneath this page).
+  /// After adopting, offers to recompute the logged records linked to the
+  /// food — a logged item is a snapshot, so rewriting history is always an
+  /// explicit, user-confirmed step.
   Future<void> _editNutrients() async {
     final Food? updated = await Navigator.of(context).push<Food>(
       MaterialPageRoute<Food>(
@@ -148,6 +163,82 @@ class _SavedFoodDetailScreenState extends ConsumerState<SavedFoodDetailScreen> {
       return;
     }
     setState(() => _food = updated);
+    await _offerHistoryRecompute(updated);
+  }
+
+  /// Offers to recompute every logged item linked to [food] from the food's
+  /// freshly saved values; a no-op when nothing links to it or the read
+  /// fails (the offer is best effort, never a blocker).
+  Future<void> _offerHistoryRecompute(Food food) async {
+    final List<MealWithItems> affected;
+    try {
+      affected = await ref
+          .read(mealRepositoryProvider)
+          .getMealsWithItemsForFood(food.id);
+    } on Object {
+      return;
+    }
+    if (!mounted || affected.isEmpty) {
+      return;
+    }
+    final int itemCount = affected.fold<int>(
+      0,
+      (int n, MealWithItems entry) =>
+          n + entry.items.where((MealItem it) => it.foodId == food.id).length,
+    );
+    if (!mounted) {
+      return;
+    }
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) => AlertDialog(
+        key: savedFoodRecomputeDialogKey,
+        title: Text(S.of(dialogContext).foodRecomputeTitle),
+        content: Text(
+          S.of(dialogContext).foodRecomputeBody(itemCount, affected.length),
+        ),
+        actions: <Widget>[
+          TextButton(
+            key: savedFoodRecomputeCancelKey,
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(S.of(dialogContext).cancel),
+          ),
+          FilledButton(
+            key: savedFoodRecomputeConfirmKey,
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(S.of(dialogContext).foodRecomputeConfirm),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+    final List<MealWithItems> recomputed = recomputeHistoryForFood(
+      food,
+      affected,
+    );
+    var recomputedCount = 0;
+    for (var i = 0; i < recomputed.length; i++) {
+      // Unchanged meals come back as the same instance — skip the rewrite.
+      if (identical(recomputed[i], affected[i])) {
+        continue;
+      }
+      await ref
+          .read(mealRepositoryProvider)
+          .updateMealWithItems(recomputed[i].meal, recomputed[i].items);
+      recomputedCount += recomputed[i].items
+          .where((MealItem it) => it.foodId == food.id)
+          .length;
+    }
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(S.of(context).foodRecomputeSnack(recomputedCount)),
+      ),
+    );
   }
 
   /// Confirms and performs the delete, then pops back to the catalogue.
