@@ -28,12 +28,12 @@
 /// `dailyMealsForDayProvider(dayKey)`, …), so each page renders its own live
 /// period while the header is shared.
 ///
-/// The day view composes the task-24 daily summary hero card with two quick-add
-/// actions (a meal and an exercise) and a live, FLAT list of everything eaten on
-/// the viewed day: one row per food (name, grams, kcal), never the meal-type
-/// buckets (早餐/午餐/晚餐/加餐). Tapping a food row opens the `/meal/:id` detail
-/// of the meal it belongs to. Week and month views show their chart and
-/// cumulative totals only.
+/// The day view composes the task-24 daily summary hero card, the two quick-add
+/// actions (a meal and an exercise) right under it, then the 体重 card, and a
+/// live, FLAT list of everything eaten on the viewed day: one row per food
+/// (name, grams, kcal), never the meal-type buckets (早餐/午餐/晚餐/加餐).
+/// Tapping a food row opens the `/meal/:id` detail of the meal it belongs to.
+/// Week and month views show their chart and cumulative totals only.
 ///
 /// The quick-add actions push the capture and exercise-entry routes on this
 /// tab's own branch (`/today/capture`, `/today/exercise`): the former 记录 hub
@@ -41,12 +41,12 @@
 /// here.
 ///
 /// Quick-add is offered on **every day page** of the 日 view and records into
-/// the browsed day: the capture / exercise-entry routes receive that day as
-/// their `extra` (today's page pushes none, so a capture still records
-/// "now"), so a backfilled meal or burn lands on the day being viewed — the
-/// review screen's type selector corrects the hour-based meal-type guess.
-/// Week and month views show their chart and cumulative totals only: they have
-/// no single day to attribute a record to.
+/// the browsed day: both routes receive that day as their `extra` — the
+/// exercise form edits exactly the day being viewed, and the capture backfills
+/// into it (today's page pushes none for the capture, so a meal still records
+/// "now" and the review screen's type selector corrects the hour-based
+/// meal-type guess). Week and month views show their chart and cumulative
+/// totals only: they have no single day to attribute a record to.
 ///
 /// Everything is driven by the task-24/22/26 `watch` streams, so the numbers and
 /// the list update the moment a meal or exercise is saved on another route.
@@ -369,7 +369,8 @@ class _DayPageBody extends ConsumerWidget {
     // hero + quick-add + log fill a phone viewport on their own, so an
     // empty-state card would push the log below the fold for users who never
     // record weight. Discovery lives on the 我的 tab (体重 entry); once a
-    // first weight is recorded the card appears here, right under the hero.
+    // first weight is recorded the card appears here, right under the
+    // quick-add actions.
     final AsyncValue<List<WeightEntry>> weightEntries = isToday
         ? ref.watch(weightEntriesProvider)
         : const AsyncValue<List<WeightEntry>>.data(<WeightEntry>[]);
@@ -383,10 +384,6 @@ class _DayPageBody extends ConsumerWidget {
       children: <Widget>[
         DailySummaryView(dayKey: dayKey, isToday: isToday),
         const SizedBox(height: 16),
-        if (showWeightCard) ...<Widget>[
-          WeightCard(todayKey: dayKey),
-          const SizedBox(height: 16),
-        ],
         Row(
           children: <Widget>[
             Expanded(
@@ -406,16 +403,19 @@ class _DayPageBody extends ConsumerWidget {
             Expanded(
               child: OutlinedButton.icon(
                 key: todayQuickAddExerciseKey,
-                onPressed: () => context.push(
-                  '/today/exercise',
-                  extra: isToday ? null : dayKey,
-                ),
+                // The exercise form edits exactly the day being viewed —
+                // today included — so the burn lands on this page's date.
+                onPressed: () => context.push('/today/exercise', extra: dayKey),
                 icon: const Icon(Icons.directions_run),
                 label: Text(S.of(context).quickAddExercise),
               ),
             ),
           ],
         ),
+        if (showWeightCard) ...<Widget>[
+          const SizedBox(height: 16),
+          WeightCard(todayKey: dayKey),
+        ],
         const SizedBox(height: 24),
         SectionHeader(
           title: isToday

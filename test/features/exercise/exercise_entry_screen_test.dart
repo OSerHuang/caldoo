@@ -4,12 +4,11 @@
 /// Everything runs against in-memory fakes and the real providers: no socket,
 /// no platform channel, no file DB.
 ///
-/// Covered here are the day rules the screen exists for: it opens on
-/// **yesterday**, flips to **today** once yesterday is recorded, lets the user
-/// pick any earlier day (never a future one), honours an explicitly pushed
-/// initial day (a past 概览 page's quick-add) and saves/clears the selected day
-/// only. The Material dialog strings are asserted in zh-CN, which is the locale
-/// the app boots with.
+/// Covered here are the day rules the screen exists for: with no pushed day it
+/// opens on **today**, honours an explicitly pushed initial day (a 概览 day
+/// page's quick-add) exactly, lets the user pick any earlier day (never a
+/// future one), and saves/clears the selected day only. The Material dialog
+/// strings are asserted in zh-CN, which is the locale the app boots with.
 library;
 
 import 'package:clock/clock.dart';
@@ -21,6 +20,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:caldoo/core/math/energy_balance.dart';
 import 'package:caldoo/core/providers/app_providers.dart';
 import 'package:caldoo/core/time/date_windows.dart';
+import 'package:caldoo/core/time/day_tick_provider.dart';
 import 'package:caldoo/domain/models/daily_exercise.dart';
 import 'package:caldoo/domain/models/user_profile.dart';
 import 'package:caldoo/features/exercise/exercise_entry_controller.dart';
@@ -42,10 +42,10 @@ final UserProfile _profile = UserProfile(
 /// 2026-09-21 12:00 +08:00.
 final DateTime _now = DateTime.utc(2026, 9, 21, 4);
 
-/// The date-only key of that day.
+/// The date-only key of that day — the screen's no-day fallback.
 final DateTime _todayKey = DateTime.utc(2026, 9, 21);
 
-/// The date-only key of the preceding local day — the form's opening default.
+/// The date-only key of the preceding local day.
 final DateTime _yesterdayKey = DateTime.utc(2026, 9, 20);
 
 /// The mutable "now" the injected clock reads; tests may roll it over.
@@ -63,6 +63,9 @@ void main() {
         exerciseRepositoryProvider.overrideWithValue(exerciseRepo),
         exerciseClockProvider.overrideWithValue(Clock(() => _clockNow)),
         exerciseOffsetProvider.overrideWithValue(const LocalOffset(480)),
+        // The controlled time seams above decide the day keys; the tick stream
+        // stays silent (its real implementation would leak timers here).
+        dayTickProvider.overrideWith((ref) => const Stream<int>.empty()),
       ],
     );
   });
@@ -116,97 +119,83 @@ void main() {
   }
 
   testWidgets(
-    'opens on yesterday: empty readout, blank field, nothing stored',
+    'opens on today when no day is pushed: empty readout, blank field',
     (WidgetTester tester) async {
       await pumpScreen(tester);
 
-      expect(dateText(tester), '昨天 · 2026年9月20日');
+      expect(dateText(tester), '今天 · 2026年9月21日');
       expect(valueText(tester), '还没有记录运动消耗');
       expect(fieldText(tester), '');
-      expect(await exerciseRepo.getDay(_yesterdayKey), isNull);
-    },
-  );
-
-  testWidgets(
-    'a typed burn saves for yesterday and drives that day\'s budget',
-    (WidgetTester tester) async {
-      await pumpScreen(tester);
-
-      await tester.enterText(find.byKey(exerciseKcalFieldKey), '257');
-      await tester.pumpAndSettle();
-      // The burn field is digits-only: a decimal point cannot be entered, so a
-      // user typing "257." still has "257" in the field.
-      await tester.enterText(find.byKey(exerciseKcalFieldKey), '257.');
-      await tester.pumpAndSettle();
-      expect(fieldText(tester), '257');
-      await save(tester);
-
-      final DailyExercise? stored = await exerciseRepo.getDay(_yesterdayKey);
-      expect(stored, isNotNull);
-      expect(stored!.dayKey, _yesterdayKey);
-      expect(stored.kcal, 257);
       expect(await exerciseRepo.getDay(_todayKey), isNull);
-
-      expect(find.text('已记录：257 kcal'), findsOneWidget);
-      expect(valueText(tester), '已记录：257 kcal');
-
-      // The burn is added back to the day's budget by the energy engine.
-      final EnergyBudget budget = computeEnergyBudget(
-        profile: _profile,
-        intakeKcal: 0,
-        exerciseKcal: stored.kcal,
-        today: _now,
-      ) as EnergyBudget;
-      expect(budget.baseBudgetKcal, 1979);
-      expect(budget.budgetKcal, 2236);
-      expect(budget.exerciseKcal, 257);
-
-      expect(container.read(exerciseEntryControllerProvider).kcal, 257);
     },
   );
 
-  testWidgets('once yesterday is recorded, the form opens on today', (
+  testWidgets('a typed burn saves for today and drives that day\'s budget', (
     WidgetTester tester,
   ) async {
-    await exerciseRepo.setKcal(dayKey: _yesterdayKey, kcal: 300);
     await pumpScreen(tester);
 
-    expect(dateText(tester), '今天 · 2026年9月21日');
-    expect(valueText(tester), '还没有记录运动消耗');
-    expect(fieldText(tester), '');
-
-    await tester.enterText(find.byKey(exerciseKcalFieldKey), '120');
+    await tester.enterText(find.byKey(exerciseKcalFieldKey), '257');
     await tester.pumpAndSettle();
+    // The burn field is digits-only: a decimal point cannot be entered, so a
+    // user typing "257." still has "257" in the field.
+    await tester.enterText(find.byKey(exerciseKcalFieldKey), '257.');
+    await tester.pumpAndSettle();
+    expect(fieldText(tester), '257');
     await save(tester);
 
-    expect((await exerciseRepo.getDay(_todayKey))!.kcal, 120);
-    expect((await exerciseRepo.getDay(_yesterdayKey))!.kcal, 300);
-    expect(valueText(tester), '已记录：120 kcal');
+    final DailyExercise? stored = await exerciseRepo.getDay(_todayKey);
+    expect(stored, isNotNull);
+    expect(stored!.dayKey, _todayKey);
+    expect(stored.kcal, 257);
+    expect(await exerciseRepo.getDay(_yesterdayKey), isNull);
+
+    expect(find.text('已记录：257 kcal'), findsOneWidget);
+    expect(valueText(tester), '已记录：257 kcal');
+
+    // The burn is added back to the day's budget by the energy engine.
+    final EnergyBudget budget = computeEnergyBudget(
+      profile: _profile,
+      intakeKcal: 0,
+      exerciseKcal: stored.kcal,
+      today: _now,
+    ) as EnergyBudget;
+    expect(budget.baseBudgetKcal, 1979);
+    expect(budget.budgetKcal, 2236);
+    expect(budget.exerciseKcal, 257);
+
+    expect(container.read(exerciseEntryControllerProvider).kcal, 257);
   });
 
-  testWidgets('when both days are recorded, today is prefilled and editable', (
+  testWidgets('a stored burn on the opened day is prefilled and editable', (
     WidgetTester tester,
   ) async {
-    await exerciseRepo.setKcal(dayKey: _yesterdayKey, kcal: 300);
     await exerciseRepo.setKcal(dayKey: _todayKey, kcal: 120);
     await pumpScreen(tester);
 
     expect(dateText(tester), '今天 · 2026年9月21日');
     expect(fieldText(tester), '120');
     expect(valueText(tester), '已记录：120 kcal');
+
+    await tester.enterText(find.byKey(exerciseKcalFieldKey), '130');
+    await tester.pumpAndSettle();
+    await save(tester);
+
+    expect((await exerciseRepo.getDay(_todayKey))!.kcal, 130);
+    expect(valueText(tester), '已记录：130 kcal');
   });
 
   testWidgets(
     'a pushed initial day opens on exactly that day and saves there',
     (WidgetTester tester) async {
-      // The quick-add on a past 概览 day page pushes the browsed day as the
-      // route's extra; the form must open on that day, not on its own
-      // yesterday/today default.
+      // The quick-add on a 概览 day page pushes the browsed day as the route's
+      // extra; the form must edit exactly that day — a past one here, today in
+      // the tests above.
       final DateTime pushedDay = DateTime.utc(2026, 9, 18);
       await exerciseRepo.setKcal(dayKey: pushedDay, kcal: 90);
       await pumpScreen(tester, initialDay: pushedDay);
 
-      // The pushed day — not the default — with its stored burn prefilled.
+      // The pushed day — not today — with its stored burn prefilled.
       expect(dateText(tester), '2026年9月18日');
       expect(fieldText(tester), '90');
       expect(valueText(tester), '已记录：90 kcal');
@@ -216,34 +205,11 @@ void main() {
       await save(tester);
 
       expect((await exerciseRepo.getDay(pushedDay))!.kcal, 180);
-      // The default days are untouched by the explicit pick.
+      // The other days are untouched by the explicit pick.
       expect(await exerciseRepo.getDay(_yesterdayKey), isNull);
       expect(await exerciseRepo.getDay(_todayKey), isNull);
     },
   );
-
-  testWidgets('the 昨天/今天 shortcut switches days and loads their value', (
-    WidgetTester tester,
-  ) async {
-    await exerciseRepo.setKcal(dayKey: _yesterdayKey, kcal: 300);
-    await pumpScreen(tester);
-    // Yesterday is recorded, so the default is today.
-    expect(dateText(tester), '今天 · 2026年9月21日');
-
-    await tester.tap(find.text('昨天'));
-    await tester.pumpAndSettle();
-
-    expect(dateText(tester), '昨天 · 2026年9月20日');
-    expect(fieldText(tester), '300');
-    expect(valueText(tester), '已记录：300 kcal');
-
-    await tester.tap(find.text('今天'));
-    await tester.pumpAndSettle();
-
-    expect(dateText(tester), '今天 · 2026年9月21日');
-    expect(fieldText(tester), '');
-    expect(valueText(tester), '还没有记录运动消耗');
-  });
 
   testWidgets(
     'the date card opens a picker limited to today and the past year',
@@ -259,10 +225,10 @@ void main() {
         find.byType(DatePickerDialog),
       );
       // A burn is never logged for a future day, and the picker starts on the
-      // day currently being edited.
+      // day currently being edited (today, for a no-day open).
       expect(dialog.firstDate, DateTime(2025, 9, 21));
       expect(dialog.lastDate, DateTime(2026, 9, 21));
-      expect(dialog.initialDate, DateTime(2026, 9, 20));
+      expect(dialog.initialDate, DateTime(2026, 9, 21));
 
       // Pick the 18th (an older, already recorded day) and confirm.
       await tester.tap(find.text('18'));
@@ -290,10 +256,8 @@ void main() {
   ) async {
     await exerciseRepo.setKcal(dayKey: _yesterdayKey, kcal: 300);
     await exerciseRepo.setKcal(dayKey: _todayKey, kcal: 120);
-    await pumpScreen(tester);
+    await pumpScreen(tester, initialDay: _yesterdayKey);
 
-    await tester.tap(find.text('昨天'));
-    await tester.pumpAndSettle();
     await tester.tap(find.byKey(exerciseClearButtonKey));
     await tester.pumpAndSettle();
 
@@ -312,16 +276,15 @@ void main() {
 
     expect(find.byKey(exerciseErrorKey), findsOneWidget);
     expect(find.text('请输入大于 0 的运动消耗'), findsOneWidget);
-    expect(await exerciseRepo.getDay(_yesterdayKey), isNull);
+    expect(await exerciseRepo.getDay(_todayKey), isNull);
   });
 
   testWidgets('editing a saved value replaces the same day', (
     WidgetTester tester,
   ) async {
     await exerciseRepo.setKcal(dayKey: _yesterdayKey, kcal: 300);
-    await pumpScreen(tester);
-    await tester.tap(find.text('昨天'));
-    await tester.pumpAndSettle();
+    await pumpScreen(tester, initialDay: _yesterdayKey);
+    expect(fieldText(tester), '300');
 
     await tester.enterText(find.byKey(exerciseKcalFieldKey), '450');
     await tester.pumpAndSettle();
@@ -334,7 +297,7 @@ void main() {
     WidgetTester tester,
   ) async {
     await pumpScreen(tester);
-    expect(dateText(tester), '昨天 · 2026年9月20日');
+    expect(dateText(tester), '今天 · 2026年9月21日');
 
     // The app stays alive overnight; the next open must read the new date, not
     // the cached one from the previous visit.
@@ -343,25 +306,24 @@ void main() {
     await tester.pumpAndSettle();
     await pumpScreen(tester);
 
-    expect(dateText(tester), '昨天 · 2026年9月21日');
+    expect(dateText(tester), '今天 · 2026年9月22日');
     expect(fieldText(tester), '');
   });
 
-  testWidgets('re-entering the screen re-applies the opening default', (
+  testWidgets('re-entering without a pushed day forgets the previous day', (
     WidgetTester tester,
   ) async {
-    await pumpScreen(tester);
-    await tester.tap(find.text('今天'));
-    await tester.pumpAndSettle();
-    expect(dateText(tester), '今天 · 2026年9月21日');
+    final DateTime pushedDay = DateTime.utc(2026, 9, 15);
+    await pumpScreen(tester, initialDay: pushedDay);
+    expect(dateText(tester), '2026年9月15日');
 
-    // Leave the screen and come back: nothing was recorded, so the next open
-    // must fall back to yesterday instead of the stale explicit pick.
+    // Leave the screen and come back without a day: the next open must fall
+    // back to today instead of the stale pushed day.
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
     await pumpScreen(tester);
 
-    expect(dateText(tester), '昨天 · 2026年9月20日');
+    expect(dateText(tester), '今天 · 2026年9月21日');
     expect(fieldText(tester), '');
   });
 }

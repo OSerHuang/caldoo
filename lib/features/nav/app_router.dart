@@ -92,9 +92,10 @@ StatefulShellRoute _shellRoute() {
               GoRoute(
                 path: 'exercise',
                 builder: (BuildContext context, GoRouterState state) {
-                  // Optional explicit day, pushed as `extra` by a past-day
-                  // page's quick-add; without it the screen applies its own
-                  // opening default (yesterday, or today when recorded).
+                  // The viewed day (today's page included), pushed as `extra`
+                  // by the day page's quick-add; the form edits exactly it.
+                  // Without an extra — a hand-typed deep link — the screen
+                  // falls back to today.
                   final Object? extra = state.extra;
                   return ExerciseEntryScreen(
                     initialDay: extra is DateTime ? extra : null,
