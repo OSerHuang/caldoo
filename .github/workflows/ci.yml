@@ -58,5 +58,99 @@ jobs:
       - run: flutter analyze
 
       # The ui-renders goldens are macOS review artifacts, not CI gates (see
-      # dart_test.yaml) — exclude them; everything else runs.
-      - run: flutter test --exclude-tags=ui-renders
+      # dart_test.yaml) — exclude them; everything else runs. --coverage feeds
+      # the badge job below; the lcov file is only uploaded on master pushes.
+      - run: flutter test --coverage --exclude-tags=ui-renders
+
+      - name: Upload coverage data
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: actions/upload-artifact@v4
+        with:
+          name: lcov
+          path: coverage/lcov.info
+
+  # Render lcov into a shields-style SVG and force-push it to the orphan
+  # badges branch that both READMEs embed. Write access lives only in this
+  # job — the check job and every PR run stay read-only.
+  badge:
+    name: publish coverage badge
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: badges
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: lcov
+          path: coverage
+
+      - name: Render badge SVG from lcov
+        run: |
+          python3 - <<'EOF'
+          import os
+
+          found = hit = 0
+          for line in open('coverage/lcov.info'):
+              if line.startswith('LF:'):
+                  found += int(line.split(':', 1)[1])
+              elif line.startswith('LH:'):
+                  hit += int(line.split(':', 1)[1])
+          pct = round(100 * hit / found, 1) if found else 0.0
+          label = f'{pct}%'
+
+          # Shields coverage colour steps: brightgreen / green / yellowgreen
+          # / yellow / red.
+          if pct >= 95:
+              color = '#4c1'
+          elif pct >= 90:
+              color = '#97ca00'
+          elif pct >= 75:
+              color = '#a4a61d'
+          elif pct >= 60:
+              color = '#dfb317'
+          else:
+              color = '#e05d44'
+
+          # Segment widths as measured on the hand-pushed badge: the fixed
+          # "coverage" label is 62px; the value side uses Verdana 11px
+          # advances (digits 7, "." 4, "%" 12) plus 6px padding per side.
+          w_label = 62
+          table = {'.': 4, '%': 12}
+          w_value = round(sum(table.get(c, 7) for c in label)) + 12
+          total = w_label + w_value
+
+          svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="{total}" height="20" '
+                 f'role="img" aria-label="coverage: {label}">'
+                 '<linearGradient id="s" x2="0" y2="100%">'
+                 '<stop offset="0" stop-color="#bbb" stop-opacity=".1"/>'
+                 '<stop offset="1" stop-opacity=".1"/></linearGradient>'
+                 f'<clipPath id="r"><rect width="{total}" height="20" rx="3" fill="#fff"/></clipPath>'
+                 f'<g clip-path="url(#r)"><rect width="{w_label}" height="20" fill="#555"/>'
+                 f'<rect x="{w_label}" width="{w_value}" height="20" fill="{color}"/>'
+                 f'<rect width="{total}" height="20" fill="url(#s)"/></g>'
+                 '<g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11">'
+                 f'<text x="{w_label // 2}" y="15">coverage</text>'
+                 f'<text x="{w_label + w_value // 2}" y="15">{label}</text></g></svg>')
+
+          open('coverage.svg', 'w').write(svg)
+          with open(os.environ['GITHUB_ENV'], 'a') as env:
+              env.write(f'PCT={label}\n')
+          EOF
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add coverage.svg
+          if git diff --cached --quiet; then
+            echo "Coverage unchanged at $PCT; badges branch is already up to date."
+          else
+            git commit -m "badge: coverage $PCT"
+            git push
+          fi
