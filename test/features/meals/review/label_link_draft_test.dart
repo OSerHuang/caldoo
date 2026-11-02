@@ -176,4 +176,55 @@ void main() {
       expect(byKcal.item.kcal, 130);
     });
   });
+
+  group('editGrams on a row without a scaling basis', () {
+    test('a manually added blank row keeps the nutrients the user typed', () {
+      final ReviewItem item = ReviewItem(base: blankReviewItem('blank-1'));
+
+      // The user fills the values in, then notices the grams are wrong.
+      item.editName('自制沙拉');
+      item.editKcal(200);
+      item.editNutrient(ReviewNutrient.carbG, 45);
+      item.editNutrient(ReviewNutrient.proteinG, 12);
+      item.editNutrient(ReviewNutrient.fatG, 8);
+      item.editNutrient(ReviewNutrient.saltG, 1.5);
+
+      item.editGrams(160);
+
+      // The blank row has no base to rescale from: the grams edit may only
+      // change the weight, the typed values ARE the values.
+      expect(item.grams, 160);
+      expect(item.item.kcal, 200);
+      expect(item.item.carbG, 45);
+      expect(item.item.proteinG, 12);
+      expect(item.item.fatG, 8);
+      expect(item.item.saltG, 1.5);
+    });
+
+    test('a zero-gram AI row keeps its overrides too', () {
+      final ReviewItem item = ReviewItem(base: riceItem(grams: 0));
+
+      item.editKcal(200);
+      item.editNutrient(ReviewNutrient.carbG, 45);
+
+      item.editGrams(160);
+
+      expect(item.grams, 160);
+      expect(item.item.kcal, 200);
+      expect(item.item.carbG, 45);
+    });
+
+    test('a normal AI row still rescales and drops the overrides', () {
+      final ReviewItem item = ReviewItem(base: riceItem());
+
+      item.editKcal(500);
+      item.editGrams(150);
+
+      // Proportional rescale from the 100 g basis; the stale override must
+      // not freeze on top of the fresh numbers.
+      expect(item.grams, 150);
+      expect(item.item.kcal, 180);
+      expect(item.item.carbG, 12);
+    });
+  });
 }
