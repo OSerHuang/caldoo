@@ -6,11 +6,14 @@ import 'package:caldoo/domain/models/food.dart';
 import 'package:caldoo/domain/models/meal.dart';
 import 'package:caldoo/domain/models/user_profile.dart';
 import 'package:caldoo/features/settings/ai_settings.dart';
+import 'package:caldoo/features/settings/backup/auto_backup_providers.dart'
+    show autoBackupStorageProvider;
 import 'package:caldoo/features/settings/privacy/delete_all_data.dart';
 import 'package:caldoo/features/settings/privacy/privacy_notice.dart';
 import 'package:caldoo/features/settings/settings_providers.dart';
 
 import '../../../data/db/_test_db.dart';
+import '../backup/_auto_backup_fakes.dart';
 import '../_fakes.dart';
 
 /// Every table in the schema; the wipe must leave all of them empty.
@@ -77,12 +80,14 @@ Future<void> _pumpButton(
   WidgetTester tester, {
   required AppDatabase db,
   required InMemorySecureKeyStore keyStore,
+  required InMemoryAutoBackupStorage backups,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         secureKeyStoreProvider.overrideWithValue(keyStore),
+        autoBackupStorageProvider.overrideWithValue(backups),
       ],
       child: const MaterialApp(home: Scaffold(body: DeleteAllDataButton())),
     ),
@@ -107,7 +112,12 @@ void main() {
     'cancelling the confirm dialog is a no-op; confirming wipes DB + key',
     (tester) async {
       await _seed(db, keyStore);
-      await _pumpButton(tester, db: db, keyStore: keyStore);
+      await _pumpButton(
+        tester,
+        db: db,
+        keyStore: keyStore,
+        backups: InMemoryAutoBackupStorage(),
+      );
 
       // --- Unconfirmed: cancel must change nothing. ---
       await tester.tap(find.byKey(const Key('privacy_delete_all_button')));
@@ -153,6 +163,40 @@ void main() {
           reason: '$table must be empty after the wipe',
         );
       }
+    },
+  );
+
+  testWidgets(
+    'confirming the wipe also deletes the automatic backup documents',
+    (tester) async {
+      await _seed(db, keyStore);
+      final InMemoryAutoBackupStorage backups = InMemoryAutoBackupStorage();
+      backups.seed(
+        'data-2026-01-01T12-00.json',
+        '{"version":2}',
+        savedAt: DateTime(2026, 1, 1),
+      );
+      backups.seed(
+        'data-2026-01-02T12-00.json',
+        '{"version":2}',
+        savedAt: DateTime(2026, 1, 2),
+      );
+      await _pumpButton(tester, db: db, keyStore: keyStore, backups: backups);
+
+      // --- Unconfirmed: the backups must survive. ---
+      await tester.tap(find.byKey(const Key('privacy_delete_all_button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('privacy_delete_cancel')));
+      await tester.pumpAndSettle();
+      expect(backups.documents, hasLength(2));
+
+      // --- Confirmed: the backup folder is emptied too. ---
+      await tester.tap(find.byKey(const Key('privacy_delete_all_button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('privacy_delete_confirm')));
+      await tester.pumpAndSettle();
+
+      expect(backups.documents, isEmpty);
     },
   );
 }
