@@ -1,9 +1,9 @@
 /// Review-screen integration of the analyze-then-link call (P1).
 ///
-/// The link call itself is faked (no socket): each test pins one contract of
-/// `design/label-linking.md` §5 — auto-apply, undo, user-edit protection,
-/// candidate chips, and the lexical-fallback boundary — plus the §17 rule that
-/// a **photo** capture never matches the library at all.
+/// The link call itself is faked (no socket): each test pins one contract —
+/// auto-apply, undo, user-edit protection, candidate chips, and the
+/// lexical-fallback boundary — plus the rule that a **photo** capture never
+/// matches the library at all.
 library;
 
 import 'dart:async';

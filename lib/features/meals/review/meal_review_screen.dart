@@ -29,8 +29,8 @@
 /// meal never depends on any of this.
 ///
 /// A **text-only** capture also runs a background label-link call that matches
-/// the items against the saved-food library (`label_linker.dart`, see
-/// `design/label-linking.md`). A validated match is auto-applied to untouched
+/// the items against the saved-food library (`label_linker.dart`). A validated
+/// match is auto-applied to untouched
 /// rows (name, per-100 g nutrients, and a serving-count gram correction), with
 /// an immediate 撤销 / 更换 path on the row; rows the user edited only get the
 /// candidates as chips. A link failure is never fatal — the pre-link lexical

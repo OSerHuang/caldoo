@@ -23,10 +23,9 @@
 ///   never demoted. Barcode is deliberately never used;
 /// * [suggestSavedFood] is a **non-binding** suggestion: it never applies
 ///   anything. Only an explicit user choice reaches [resolveNutrients].
-///   The one automatic path is the analyze-then-link call
-///   (`design/label-linking.md`): its id-validated match may be applied for the
-///   user, but only with an immediate undo, and this lexical scorer still never
-///   auto-applies.
+///   The one automatic path is the analyze-then-link call: its id-validated
+///   match may be applied for the user, but only with an immediate undo, and
+///   this lexical scorer still never auto-applies.
 ///
 /// The caller keeps `foodId` + `grams` on the [MealItem] and calls
 /// [resolveNutrients] again when the grams change instead of snapshotting the

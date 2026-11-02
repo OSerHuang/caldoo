@@ -1,5 +1,4 @@
-/// Unit tests for the pure label-linking layer (design
-/// `design/label-linking.md` §4.2, §4.4, §5.1).
+/// Unit tests for the pure label-linking layer.
 ///
 /// Three seams are covered here, all without any AI payload or Flutter widget:
 ///

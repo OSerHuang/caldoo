@@ -1,5 +1,5 @@
 /// Label linking: the pure logic between the user's saved foods and the AI
-/// meal items (design `design/label-linking.md` §4.2, §4.4, §5.1).
+/// meal items.
 ///
 /// The link AI call (`lib/ai/prompts/label_link_prompt.dart`) returns only
 /// index numbers ([LabelMatch] from `lib/ai/schemas/label_link.dart`). This file

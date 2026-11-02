@@ -1,6 +1,6 @@
 /// The automatic off-app backup: capture, keep the newest copies, restore.
 ///
-/// Design rules this file enforces (see `design/auto-backup.md`):
+/// The rules this file enforces:
 /// * **never overwrite a good copy with an empty database** — a fresh install
 ///   holds nothing, so a run then is skipped instead of rotating the only
 ///   surviving backups away;
