@@ -31,6 +31,7 @@ import 'package:caldoo/features/meals/capture/image_codec.dart';
 import 'package:caldoo/features/meals/capture/meal_capture_controller.dart';
 import 'package:caldoo/features/meals/capture/meal_capture_screen.dart';
 import 'package:caldoo/features/meals/capture/review_placeholder_screen.dart';
+import 'package:caldoo/features/settings/ai_settings.dart';
 import 'package:caldoo/features/settings/settings_providers.dart'
     show appDatabaseProvider, dioProvider, secureKeyStoreProvider;
 import 'package:caldoo/l10n/app_strings.dart';
@@ -320,6 +321,50 @@ void main() {
     expect(body, contains('emit_meal_items'));
     // Text-only mode carries no image part.
     expect(body, isNot(contains('image_url')));
+  });
+
+  testWidgets('submit uses the saved config, not the cold-start defaults', (
+    tester,
+  ) async {
+    final RecordingReviewRouter router = RecordingReviewRouter();
+    final mock = mockDio((options) => mealCompletion(mealArguments));
+    // A saved non-default config. Nothing reads aiSettingsConfigProvider
+    // before this submit, so the request must wait for the saved values —
+    // reading the client eagerly would carry the user's key to the default
+    // endpoint instead.
+    await AiSettingsRepository(
+      dao: db.appSettingsDao,
+      keyStore: keyStore,
+    ).saveConfig(
+      const AiSettings(
+        baseUrl: 'https://saved.example.com',
+        model: 'saved-model',
+      ),
+    );
+    await keyStore.write(testApiKey);
+    await _pumpCapture(
+      tester,
+      db: db,
+      keyStore: keyStore,
+      dio: mock.dio,
+      router: router,
+    );
+
+    await tester.enterText(
+      find.byKey(const Key('capture_text_field')),
+      '两个鸡蛋一碗米饭',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('capture_submit_button')));
+    await tester.pumpAndSettle();
+
+    expect(mock.adapter.calls, 1);
+    expect(router.calls, 1);
+    expect(mock.adapter.requests.single.uri.host, 'saved.example.com');
+    expect(
+      jsonEncode(mock.adapter.requests.single.data),
+      contains('saved-model'),
+    );
   });
 
   testWidgets('photo+text submit carries a downscaled image and routes', (

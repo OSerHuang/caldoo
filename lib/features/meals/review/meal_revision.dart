@@ -31,7 +31,7 @@ import 'package:caldoo/ai/schemas/meal_analysis.dart';
 import 'package:caldoo/domain/models/models.dart';
 import 'package:caldoo/features/meals/capture/image_codec.dart';
 import 'package:caldoo/features/settings/settings_providers.dart'
-    show aiClientProvider;
+    show aiClientProvider, aiSettingsConfigProvider;
 
 /// Re-runs the meal analysis with a user correction.
 ///
@@ -63,6 +63,10 @@ final mealReviserProvider = Provider<MealReviser>((ref) {
     required String correctionNote,
     required List<MealItem> currentItems,
   }) async {
+    // Cold-start guard: build the client against the loaded saved config, not
+    // the defaults, or the request would carry the user's key to the default
+    // endpoint (same guard as saveAndTestConnection).
+    await ref.read(aiSettingsConfigProvider.future);
     final AiClient client = ref.read(aiClientProvider);
     final PromptTemplate prompt = mealRevisionPrompt(
       photoCount: photos.length,

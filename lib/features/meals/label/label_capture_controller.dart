@@ -36,7 +36,7 @@ import 'package:caldoo/domain/services/label_priority.dart'
     show parseFoodAliases, parseFoodServings;
 import 'package:caldoo/features/meals/capture/image_codec.dart';
 import 'package:caldoo/features/settings/settings_providers.dart'
-    show aiClientProvider;
+    show aiClientProvider, aiSettingsConfigProvider;
 // Reuse the one exhaustive AiError -> zh-CN message map (task 17) instead of
 // duplicating the sealed-taxonomy switch here.
 import 'package:caldoo/features/settings/ai_error_text.dart'
@@ -250,6 +250,10 @@ class LabelCaptureController extends Notifier<LabelCaptureState> {
       return;
     }
     try {
+      // Cold-start guard: read the client only after the saved config has
+      // loaded, or the request would carry the user's key to the default
+      // endpoint (same guard as saveAndTestConnection).
+      await ref.read(aiSettingsConfigProvider.future);
       final AiClient client = ref.read(aiClientProvider);
       final String arguments = await client.completeWithTool(
         messages: labelPhotoPrompt(

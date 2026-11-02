@@ -39,7 +39,7 @@ import 'package:caldoo/ai/prompts/prompts.dart';
 import 'package:caldoo/ai/schemas/meal_analysis.dart'
     show MealAnalysis, mealAnalysisToolName, mealAnalysisToolParameters;
 import 'package:caldoo/features/settings/settings_providers.dart'
-    show aiClientProvider;
+    show aiClientProvider, aiSettingsConfigProvider;
 
 import 'image_codec.dart';
 import 'review_placeholder_screen.dart';
@@ -232,6 +232,11 @@ class CaptureController extends Notifier<CaptureState> {
       outcome: CaptureOutcome.idle,
       clearError: true,
     );
+    // On a cold start the config FutureProvider may still be loading; reading
+    // the client before it settles would silently fall back to the default
+    // endpoint and send the user's key there. Same guard as
+    // saveAndTestConnection.
+    await ref.read(aiSettingsConfigProvider.future);
     final AiClient client = ref.read(aiClientProvider);
     try {
       final PromptTemplate prompt = photos.isNotEmpty
