@@ -1295,8 +1295,8 @@ class S {
 
   /// Delete confirmation body.
   String get deleteConfirmBody =>
-      '这会永久删除本机上的所有饮食、运动与个人资料数据，以及已保存的 API Key。'
-      '此操作无法撤销。';
+      '这会永久删除本机上的所有饮食、运动与个人资料数据、已保存的 API Key，'
+      '以及「Download/caldoo」里的自动备份文件。此操作无法撤销。';
 
   /// Data-deleted snackbar.
   String get dataDeletedSnack => '本机数据已删除';
