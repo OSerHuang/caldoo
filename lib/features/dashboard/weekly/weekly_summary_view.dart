@@ -3,9 +3,11 @@
 /// Renders, live from the repository `watch` streams:
 /// * a `fl_chart` `BarChart` with **seven Mon..Sun groups**, each carrying an
 ///   **intake** bar (what was eaten) and, when a profile exists, a **burn** bar
-///   (that logged day's budget: BMR + exercise);
+///   (that logged day's expenditure: BMR + exercise — never the user's goal,
+///   which is a diet target, not expended energy);
 /// * a **dashed target line** at the profile's resolved BMR (the user's own
-///   override or the Mifflin-St Jeor estimate, excluding exercise), labelled
+///   override or the Mifflin-St Jeor estimate, excluding exercise and
+///   regardless of any set goal), labelled
 ///   [weeklyTargetLineLabel] so it can never be confused with the daily
 ///   dashboard's `今日额度(含运动)`. The line
 ///   is a single flat reference because one line cannot represent seven
@@ -204,7 +206,7 @@ class WeeklySummaryView extends ConsumerWidget {
       ) =>
         _WeeklyCard(
           days: days,
-          baseBudgetKcal: null,
+          bmrKcal: null,
           loggedDays: loggedDays,
           adherentDays: adherentDays,
           totalIntakeKcal: totalIntakeKcal,
@@ -213,7 +215,7 @@ class WeeklySummaryView extends ConsumerWidget {
         ),
       WeeklySummaryReady(:final WeeklySummary summary) => _WeeklyCard(
         days: summary.days,
-        baseBudgetKcal: summary.baseBudgetKcal,
+        bmrKcal: summary.bmrKcal,
         goalKcal: summary.goalKcal,
         goalAdherentDays: summary.goalAdherentDays,
         loggedDays: summary.loggedDays,
@@ -228,11 +230,11 @@ class WeeklySummaryView extends ConsumerWidget {
   }
 }
 
-/// The card body for a known week of [days] and an optional base budget.
+/// The card body for a known week of [days] and an optional resolved BMR.
 class _WeeklyCard extends StatelessWidget {
   const _WeeklyCard({
     required this.days,
-    required this.baseBudgetKcal,
+    required this.bmrKcal,
     required this.loggedDays,
     required this.adherentDays,
     required this.totalIntakeKcal,
@@ -246,12 +248,13 @@ class _WeeklyCard extends StatelessWidget {
 
   final List<DayRollup> days;
 
-  /// The exercise-free base budget (the user's goal when set, else the BMR), or
-  /// `null` when the profile is incomplete.
-  final int? baseBudgetKcal;
+  /// The resolved BMR (exercise-free; never the user's goal, which is a diet
+  /// target, not expended energy), or `null` when the profile is incomplete.
+  /// It draws the dashed target line and bases the burn bars.
+  final int? bmrKcal;
 
-  /// The user's daily energy goal, or `null` when no goal is set — it selects
-  /// the target-line label and the 热量达标 tile.
+  /// The user's daily energy goal, or `null` when no goal is set — it drives
+  /// the 热量达标 tile only, never the chart.
   final int? goalKcal;
 
   /// How many logged days stayed at or under [goalKcal] (0 without a goal).
@@ -279,7 +282,7 @@ class _WeeklyCard extends StatelessWidget {
     final ThemeData theme = Theme.of(context);
     final AppSemantics semantics = AppSemantics.of(context);
     final ColorScheme colors = theme.colorScheme;
-    final int? baseBudgetKcal = this.baseBudgetKcal;
+    final int? bmrKcal = this.bmrKcal;
     // The card is read-only, so the display preference reaches both the chart
     // (rods / axis / target line / tooltip) and the totals grid (which reads the
     // scope itself).
@@ -305,7 +308,7 @@ class _WeeklyCard extends StatelessWidget {
             child: BarChart(
               weeklyChartData(
                 days: days,
-                baseBudgetKcal: baseBudgetKcal,
+                bmrKcal: bmrKcal,
                 barColor: colors.primary,
                 burnColor: semantics.exercise,
                 targetColor: semantics.chartTarget,
@@ -327,24 +330,19 @@ class _WeeklyCard extends StatelessWidget {
                 label: S.of(context).legendIntake,
                 textKey: weeklyIntakeLegendKey,
               ),
-              if (baseBudgetKcal != null)
+              if (bmrKcal != null)
                 PeriodLegendDot(
                   color: semantics.exercise,
                   label: S.of(context).legendBurn,
                   textKey: weeklyBurnLegendKey,
                 ),
-              if (baseBudgetKcal != null)
+              if (bmrKcal != null)
                 PeriodLegendDash(
                   color: semantics.chartTarget,
-                  // The dashed line is the goal when one is set, else the BMR;
-                  // the label names whichever the line actually is.
-                  label: S
-                      .of(context)
-                      .targetLegend(
-                        goalKcal != null
-                            ? S.of(context).periodGoalLineLabel
-                            : weeklyTargetLineLabel,
-                      ),
+                  // The dashed line is ALWAYS the BMR — the goal only feeds
+                  // the 热量达标 tile — so the label is the fixed 基础代谢
+                  // wording no matter whether a goal is set.
+                  label: S.of(context).targetLegend(weeklyTargetLineLabel),
                   textKey: weeklyTargetLegendKey,
                 ),
             ],
@@ -382,25 +380,25 @@ class _WeeklyCard extends StatelessWidget {
 /// The long-press tooltip content for one chart day: the weekday and — for a
 /// logged day — its intake, burn (BMR + exercise) and signed difference.
 ///
-/// A missing profile ([baseBudgetKcal] `null`) only reports intake; an unlogged
+/// A missing profile ([bmrKcal] `null`) only reports intake; an unlogged
 /// day reports `logged: false` so the bubble says `未记录` rather than a row of
 /// zeros. Exposed (not private) so the widget test can pin the exact content the
 /// bubble shows without decoding the styled spans. [units] selects the display
 /// unit the bubble formats its kcal rows with; the rows themselves stay kcal.
 WeeklyDayTooltip weeklyDayTooltip({
   required DayRollup day,
-  required int? baseBudgetKcal,
+  required int? bmrKcal,
   DisplayUnits units = DisplayUnits.defaults,
 }) => periodDayTooltip(
   day: day,
-  baseBudgetKcal: baseBudgetKcal,
+  bmrKcal: bmrKcal,
   title: AppFormat.weekday(day.date),
   units: units,
 );
 
 /// Builds the `fl_chart` data: seven Mon..Sun groups, each with an intake bar
-/// plus — when [baseBudgetKcal] is known — the day's burn bar (base + exercise),
-/// and the dashed target line.
+/// plus — when [bmrKcal] is known — the day's burn bar (BMR + exercise), and
+/// the dashed target line at [bmrKcal].
 ///
 /// Exposed (not private) so the widget test can assert the exact bar values and
 /// the target-line `y` through the rendered `BarChart` without duplicating the
@@ -417,7 +415,7 @@ WeeklyDayTooltip weeklyDayTooltip({
 /// keep their kcal values and convert only when formatted.
 BarChartData weeklyChartData({
   required List<DayRollup> days,
-  required int? baseBudgetKcal,
+  required int? bmrKcal,
   Color? barColor,
   Color? burnColor,
   Color? targetColor,
@@ -427,7 +425,7 @@ BarChartData weeklyChartData({
 }) => periodChartData(
   days: days,
   xLabels: weeklyWeekdayLabels,
-  baseBudgetKcal: baseBudgetKcal,
+  bmrKcal: bmrKcal,
   tooltipTitle: (DayRollup day) => AppFormat.weekday(day.date),
   barColor: barColor,
   burnColor: burnColor,
@@ -438,12 +436,11 @@ BarChartData weeklyChartData({
 );
 
 /// The burn [day] contributes to the chart and to the week's totals: the
-/// day's budget (`base + exercise`) for a logged day, otherwise zero.
+/// day's expenditure (`bmr + exercise`) for a logged day, otherwise zero.
 ///
 /// Exposed (not private) so the widget test can state the expected burn bars
 /// without duplicating the rule.
-int weeklyBurnFor(DayRollup day, int? baseBudgetKcal) =>
-    periodBurnFor(day, baseBudgetKcal);
+int weeklyBurnFor(DayRollup day, int? bmrKcal) => periodBurnFor(day, bmrKcal);
 
 /// The y-axis tick step for a week whose highest bar / budget is [top].
 ///

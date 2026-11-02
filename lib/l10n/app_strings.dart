@@ -1462,10 +1462,6 @@ class S {
   /// is always shown, so 额度 never reads as an unexplained number.
   String budgetBmrSubline(int bmr, int exercise) => '基础代谢 $bmr + 运动 $exercise';
 
-  /// Weekly/monthly legend for the target line when a goal is set (the
-  /// exercise-free baseline is then the goal, not the BMR).
-  String get periodGoalLineLabel => '每日目标（不含运动）';
-
   /// Weekly/monthly calorie-adherence value (`adherent` of `logged` days).
   String goalAdherenceDays(int adherent, int logged) => '$adherent/$logged 天';
 

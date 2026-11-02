@@ -198,7 +198,7 @@ class MonthlySummaryView extends ConsumerWidget {
       ) =>
         _MonthlyCard(
           days: days,
-          baseBudgetKcal: null,
+          bmrKcal: null,
           loggedDays: loggedDays,
           adherentDays: adherentDays,
           totalIntakeKcal: totalIntakeKcal,
@@ -207,7 +207,7 @@ class MonthlySummaryView extends ConsumerWidget {
         ),
       PeriodSummaryReady(:final PeriodSummary summary) => _MonthlyCard(
         days: summary.days,
-        baseBudgetKcal: summary.baseBudgetKcal,
+        bmrKcal: summary.bmrKcal,
         goalKcal: summary.goalKcal,
         goalAdherentDays: summary.goalAdherentDays,
         loggedDays: summary.loggedDays,
@@ -222,11 +222,11 @@ class MonthlySummaryView extends ConsumerWidget {
   }
 }
 
-/// The card body for a known month of [days] and an optional base budget.
+/// The card body for a known month of [days] and an optional resolved BMR.
 class _MonthlyCard extends StatelessWidget {
   const _MonthlyCard({
     required this.days,
-    required this.baseBudgetKcal,
+    required this.bmrKcal,
     required this.loggedDays,
     required this.adherentDays,
     required this.totalIntakeKcal,
@@ -241,12 +241,13 @@ class _MonthlyCard extends StatelessWidget {
   /// The month's rollups, in calendar order (28..31 entries).
   final List<DayRollup> days;
 
-  /// The exercise-free base budget (the user's goal when set, else the BMR), or
-  /// `null` when the profile is incomplete.
-  final int? baseBudgetKcal;
+  /// The resolved BMR (exercise-free; never the user's goal, which is a diet
+  /// target, not expended energy), or `null` when the profile is incomplete.
+  /// It draws the dashed target line (the tooltip's burn rows use it too).
+  final int? bmrKcal;
 
-  /// The user's daily energy goal, or `null` when no goal is set — it selects
-  /// the target-line label and the 热量达标 tile.
+  /// The user's daily energy goal, or `null` when no goal is set — it drives
+  /// the 热量达标 tile only, never the chart.
   final int? goalKcal;
 
   /// How many logged days stayed at or under [goalKcal] (0 without a goal).
@@ -279,7 +280,7 @@ class _MonthlyCard extends StatelessWidget {
     final ThemeData theme = Theme.of(context);
     final AppSemantics semantics = AppSemantics.of(context);
     final ColorScheme colors = theme.colorScheme;
-    final int? baseBudgetKcal = this.baseBudgetKcal;
+    final int? bmrKcal = this.bmrKcal;
     // The card is read-only: the display preference reaches the chart (rods,
     // axis, target line, tooltip) and the totals grid, which reads the scope
     // itself.
@@ -308,7 +309,7 @@ class _MonthlyCard extends StatelessWidget {
                   BarChart(
                     monthlyChartData(
                       days: days,
-                      baseBudgetKcal: baseBudgetKcal,
+                      bmrKcal: bmrKcal,
                       barColor: colors.primary,
                       targetColor: semantics.chartTarget,
                       axisLabelColor: colors.onSurfaceVariant,
@@ -340,18 +341,13 @@ class _MonthlyCard extends StatelessWidget {
                 label: S.of(context).legendIntake,
                 textKey: monthlyIntakeLegendKey,
               ),
-              if (baseBudgetKcal != null)
+              if (bmrKcal != null)
                 PeriodLegendDash(
                   color: semantics.chartTarget,
-                  // The dashed line is the goal when one is set, else the BMR;
-                  // the label names whichever the line actually is.
-                  label: S
-                      .of(context)
-                      .targetLegend(
-                        goalKcal != null
-                            ? S.of(context).periodGoalLineLabel
-                            : periodTargetLineLabel,
-                      ),
+                  // The dashed line is ALWAYS the BMR — the goal only feeds
+                  // the 热量达标 tile — so the label is the fixed 基础代谢
+                  // wording no matter whether a goal is set.
+                  label: S.of(context).targetLegend(periodTargetLineLabel),
                   textKey: monthlyTargetLegendKey,
                 ),
             ],
@@ -416,7 +412,7 @@ String monthlyTooltipTitle(DayRollup day) => AppFormat.shortDate(day.date);
 /// keep their kcal values and convert only when formatted.
 BarChartData monthlyChartData({
   required List<DayRollup> days,
-  required int? baseBudgetKcal,
+  required int? bmrKcal,
   Color? barColor,
   Color? targetColor,
   Color? axisLabelColor,
@@ -426,7 +422,7 @@ BarChartData monthlyChartData({
 }) => periodChartData(
   days: days,
   xLabels: monthlyDayLabels(days),
-  baseBudgetKcal: baseBudgetKcal,
+  bmrKcal: bmrKcal,
   showBurnBars: false,
   rodWidth: rodWidth,
   labelEvery: monthlyLabelEvery,

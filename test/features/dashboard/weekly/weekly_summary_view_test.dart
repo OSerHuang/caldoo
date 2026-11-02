@@ -5,7 +5,7 @@
 /// * exactly 7 Mon..Sun groups, each with an intake bar and a burn bar, their
 ///   `toY` values being that day's intake and that day's budget (BMR +
 ///   exercise) — unlogged days plot nothing;
-/// * the dashed target line's `y` = the BASE budget 1979 (= BMR, exercise
+/// * the dashed target line's `y` = the BMR 1979 (= the resolved BMR, exercise
 ///   EXCLUDED), its dash array and its `基础代谢(不含运动)` label;
 /// * the bar legend items (`摄入` / `消耗`);
 /// and on the metric rows: the week's CUMULATIVE total intake, total burn and
@@ -172,7 +172,7 @@ void main() {
       expect(chart.data.minY, 0);
       expect(chart.data.titlesData.leftTitles.sideTitles.interval, 1000);
 
-      // --- Dashed target line at the BASE budget (exercise excluded). ---
+      // --- Dashed target line at the BMR (exercise excluded, goal ignored). ---
       final HorizontalLine line =
           chart.data.extraLinesData.horizontalLines.single;
       expect(line.y, 1979, reason: 'base = BMR override 1979');
@@ -438,7 +438,7 @@ void main() {
     test('fixture week -> maxY 3000, interval 1000', () {
       final BarChartData data = weeklyChartData(
         days: _week(<int>[2000, 1500, 2200, 1800, 2500, 0, 0]),
-        baseBudgetKcal: 1979,
+        bmrKcal: 1979,
       );
       expect(data.maxY, 3000);
       expect(data.minY, 0);
@@ -455,7 +455,7 @@ void main() {
     test('device case (max intake 4234, base 1979) -> maxY 6000, step 2000', () {
       final BarChartData data = weeklyChartData(
         days: _week(<int>[4234, 0, 0, 0, 0, 0, 0]),
-        baseBudgetKcal: 1979,
+        bmrKcal: 1979,
       );
       // 4234 * 1.2 = 5080.8 rounds UP to the next whole 2000 multiple.
       expect(data.maxY, 6000);
@@ -478,7 +478,7 @@ void main() {
         final double interval = weeklyChartInterval(0);
         final BarChartData data = weeklyChartData(
           days: _week(<int>[0, 0, 0, 0, 0, 0, 0]),
-          baseBudgetKcal: null,
+          bmrKcal: null,
         );
         expect(data.maxY, 100);
         expect(data.maxY % interval, 0);
@@ -509,7 +509,7 @@ void main() {
       () {
         final WeeklyDayTooltip tooltip = weeklyDayTooltip(
           day: dayFor(4),
-          baseBudgetKcal: 1979,
+          bmrKcal: 1979,
         );
         expect(tooltip.title, '周五');
         expect(tooltip.logged, isTrue);
@@ -530,7 +530,7 @@ void main() {
     test("burn row carries that day's exercise; the difference is signed", () {
       final WeeklyDayTooltip tooltip = weeklyDayTooltip(
         day: dayFor(2),
-        baseBudgetKcal: 1979,
+        bmrKcal: 1979,
       );
       expect(tooltip.rows[1].kcal, 2236, reason: '1979 BMR + 257 exercise');
       expect(tooltip.rows[2].kcal, -36, reason: '2200 intake - 2236 burn');
@@ -539,7 +539,7 @@ void main() {
     test('an unlogged day reports 未记录 instead of zero rows', () {
       final WeeklyDayTooltip tooltip = weeklyDayTooltip(
         day: dayFor(5),
-        baseBudgetKcal: 1979,
+        bmrKcal: 1979,
       );
       expect(tooltip.title, '周六');
       expect(tooltip.logged, isFalse);
@@ -549,7 +549,7 @@ void main() {
     test('without a profile only the intake row is reported', () {
       final WeeklyDayTooltip tooltip = weeklyDayTooltip(
         day: dayFor(0),
-        baseBudgetKcal: null,
+        bmrKcal: null,
       );
       expect(tooltip.rows.single.kind, WeeklyTooltipKind.intake);
       expect(tooltip.rows.single.kcal, 2000);
@@ -558,7 +558,7 @@ void main() {
     test('the chart hands fl_chart a legible, fitted bubble for each day', () {
       final BarChartData data = weeklyChartData(
         days: week(),
-        baseBudgetKcal: 1979,
+        bmrKcal: 1979,
         tooltipTheme: WeeklyTooltipTheme.light,
       );
       final BarTouchTooltipData touch = data.barTouchData.touchTooltipData;
@@ -676,7 +676,7 @@ void main() {
     test('rods, y-axis top and target line are converted to kJ', () {
       final BarChartData data = weeklyChartData(
         days: week(),
-        baseBudgetKcal: 1979,
+        bmrKcal: 1979,
         units: kj,
       );
       expect(
@@ -707,7 +707,7 @@ void main() {
     test('the tooltip renders kJ while its model rows keep kcal', () {
       final BarChartData data = weeklyChartData(
         days: week(),
-        baseBudgetKcal: 1979,
+        bmrKcal: 1979,
         units: kj,
         tooltipTheme: WeeklyTooltipTheme.light,
       );
@@ -725,7 +725,7 @@ void main() {
       // The model keeps the stored kcal ints; only the rendering converts.
       final WeeklyDayTooltip model = weeklyDayTooltip(
         day: dayFor(4),
-        baseBudgetKcal: 1979,
+        bmrKcal: 1979,
         units: kj,
       );
       expect(
@@ -735,7 +735,7 @@ void main() {
       expect(model.units, kj);
       // And the default tooltip model still documents the historical unit.
       expect(
-        weeklyDayTooltip(day: dayFor(4), baseBudgetKcal: 1979).units,
+        weeklyDayTooltip(day: dayFor(4), bmrKcal: 1979).units,
         DisplayUnits.defaults,
       );
       debugPrint(

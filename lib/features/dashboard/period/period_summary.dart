@@ -11,12 +11,17 @@
 ///   An exercise-only day is **not** logged.
 /// * **total intake** — the sum of the logged days' intake kcal: the period's
 ///   running food energy.
-/// * **total burn** — the sum of the logged days' budgets (`bmr + exercise`),
-///   so each logged day's exercise is added on top of the BMR exactly as the
-///   energy engine does it.
-/// * **difference** — `total intake - total burn`: the period's running
-///   `energyBalanceKcal` sum. Negative = 缺口 (deficit), positive = 盈余
-///   (surplus), exactly the task-7 sign convention.
+/// * **total burn** — the sum of the logged days' expenditure
+///   (`bmr + exercise`): the resolved BMR with each logged day's exercise
+///   added on top, the same number the chart's burn bars and the dashed
+///   基础代谢 target line are drawn at. The user's goal is deliberately NOT
+///   part of the burn — a goal is a diet target, not expended energy — so it
+///   can never drift from the chart when the two differ.
+/// * **difference** — `total intake - total burn`. Negative = 缺口 (deficit),
+///   positive = 盈余 (surplus), exactly the task-7 sign convention. It is the
+///   physiological balance (intake vs BMR + exercise), NOT the daily
+///   dashboard's 缺口(相对额度); goal adherence is the separate 热量达标
+///   metric below.
 ///
 /// These are **cumulative totals for the period so far, never averages**; only
 /// the logged days contribute, so an exercise-only day adds nothing (matching
@@ -26,10 +31,10 @@
 ///   a logged day whose sodium total is `<=` the WHO 2000 mg ceiling.
 /// * **target line** — the profile's resolved basal metabolic rate (the user's
 ///   own BMR override, or the Mifflin-St Jeor estimate — **excluding**
-///   exercise). A single flat line cannot represent the per-day
-///   exercise-varying budgets, so the line is deliberately the exercise-free
-///   baseline; the week/month dashboards label it distinctly from the daily
-///   dashboard's `今日额度(含运动)`.
+///   exercise, and regardless of any set goal). A single flat line cannot
+///   represent the per-day exercise-varying budgets, so the line is
+///   deliberately the exercise-free baseline; the week/month dashboards label
+///   it distinctly from the daily dashboard's `今日额度(含运动)`.
 /// * **weight change** — the signed delta between the period's last and first
 ///   weight entries (see [periodWeightDeltaKg]); `null` with fewer than two
 ///   in-period entries, and profile-independent like the salt adherence.
@@ -61,7 +66,7 @@ final class PeriodSummary {
   /// Creates a period summary from already-computed metrics.
   const PeriodSummary({
     required this.days,
-    required this.baseBudgetKcal,
+    required this.bmrKcal,
     required this.loggedDays,
     required this.adherentDays,
     required this.totalIntakeKcal,
@@ -76,13 +81,17 @@ final class PeriodSummary {
   /// 28..31 for a month — the chart plots these in order).
   final List<DayRollup> days;
 
-  /// The exercise-free daily baseline (the user's goal when set, else the
-  /// resolved BMR) in **whole kcal**, drawn as the dashed target line. Never
-  /// `null`: a [PeriodSummary] only exists for a complete profile.
-  final int baseBudgetKcal;
+  /// The resolved basal metabolic rate (the user's BMR override, or the
+  /// Mifflin-St Jeor estimate) in **whole kcal**, drawn as the dashed target
+  /// line and used as the base of the burn bars and the burn totals. The
+  /// user's goal — however much it differs from the BMR — is deliberately NOT
+  /// this number: a goal is a diet target, not expended energy. Never `null`:
+  /// a [PeriodSummary] only exists for a complete profile.
+  final int bmrKcal;
 
   /// The user's daily energy goal in whole kcal/day, or `null` when no goal is
-  /// set (the target line is then the BMR and no goal-adherence is reported).
+  /// set (no goal-adherence is reported then). It feeds ONLY the 热量达标
+  /// metric — never the burn bars, the target line or the burn totals.
   final int? goalKcal;
 
   /// How many logged days stayed at or under [goalKcal]. Only meaningful when
@@ -108,8 +117,9 @@ final class PeriodSummary {
   /// Sum of the logged days' intake kcal — the period's running intake.
   final int totalIntakeKcal;
 
-  /// Sum of the logged days' budgets (`base + exercise`) — the period's running
-  /// burn. Exercise on a logged day is included; an exercise-only day is not.
+  /// Sum of the logged days' expenditure (`bmrKcal + exercise`) — the period's
+  /// running burn. Exercise on a logged day is included; an exercise-only day
+  /// is not.
   final int totalBurnKcal;
 
   /// `totalIntakeKcal - totalBurnKcal` over the logged days.
@@ -268,24 +278,24 @@ PeriodSummaryState buildPeriodSummary({
   final EnergyBudget base = _requireBudget(
     computeEnergyBudget(profile: profile, intakeKcal: 0, today: today),
   );
+  // The period's burn is the physiological expenditure — the resolved BMR
+  // plus each logged day's exercise — exactly what the chart's burn bars, the
+  // dashed 基础代谢 target line and the tooltip report. The user's goal is
+  // deliberately NOT part of it: a goal is a diet target, not expended
+  // energy, so folding it into the burn would make 摄入 vs 消耗 read as
+  // diet adherence. The goal feeds ONLY the 热量达标 count above.
+  final int bmr = base.bmrKcal;
   var burnSum = 0;
   var balanceSum = 0;
   for (final day in logged) {
-    final EnergyBudget budget = _requireBudget(
-      computeEnergyBudget(
-        profile: profile,
-        intakeKcal: day.intakeKcal,
-        exerciseKcal: day.exerciseKcal,
-        today: today,
-      ),
-    );
-    burnSum += budget.budgetKcal;
-    balanceSum += budget.energyBalanceKcal;
+    final int burn = bmr + day.exerciseKcal;
+    burnSum += burn;
+    balanceSum += day.intakeKcal - burn;
   }
   return PeriodSummaryReady(
     PeriodSummary(
       days: days,
-      baseBudgetKcal: base.baseBudgetKcal,
+      bmrKcal: bmr,
       goalKcal: goal,
       goalAdherentDays: goalAdherent,
       weightEntries: weightEntries,
