@@ -13,6 +13,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:caldoo/core/time/date_windows.dart' show wallClockOf;
 import 'package:caldoo/core/units/display_units.dart';
 import 'package:caldoo/domain/models/models.dart';
 import 'package:caldoo/l10n/app_format.dart';
@@ -51,6 +52,9 @@ const Key dayTotalFatKey = Key('day_total_fat');
 /// Key of the day-running-total salt value.
 const Key dayTotalSaltKey = Key('day_total_salt');
 
+/// Key of the card's recorded-time line.
+const Key mealSummaryTimeKey = Key('meal_summary_time');
+
 /// A zh-CN label for a [MealType].
 String mealTypeLabel(MealType type) => switch (type) {
   MealType.breakfast => S.instance.mealTypeBreakfast,
@@ -75,6 +79,13 @@ class MealSummaryCard extends ConsumerWidget {
     final ThemeData theme = Theme.of(context);
     final MealTotals mealTotals = MealTotals.fromItems(items);
     final MealTotals dayTotals = ref.watch(todayTotalsProvider);
+    // The time the record is attributed to, resolved to the app's own local
+    // wall clock (never the machine timezone): a mis-stamped meal is otherwise
+    // indistinguishable from a correctly stamped one on the day log.
+    final DateTime wallClock = wallClockOf(
+      meal.timestamp,
+      ref.watch(localOffsetProvider),
+    );
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -84,6 +95,12 @@ class MealSummaryCard extends ConsumerWidget {
             Text(
               mealTypeLabel(meal.mealType),
               style: theme.textTheme.titleLarge,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              AppFormat.dateTimeMinute(wallClock),
+              key: mealSummaryTimeKey,
+              style: theme.textTheme.bodySmall,
             ),
             const SizedBox(height: 12),
             _TotalsBlock(

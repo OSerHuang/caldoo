@@ -86,6 +86,42 @@ DateTime localDateOfKey(DateTime dayKey) =>
 DateTime dayKeyFromLocalDate(DateTime localDate) =>
     DateTime.utc(localDate.year, localDate.month, localDate.day);
 
+/// The local wall clock of [instant] at [offset], as a local-flagged
+/// [DateTime].
+///
+/// Only the year/month/day/hour/minute fields are meaningful: this is the value
+/// a Material date/time picker speaks, **not** an instant. The inverse is
+/// [instantFromWallClock], so the pair round-trips:
+///
+/// ```dart
+/// wallClockOf(DateTime.utc(2026, 1, 5, 0, 30), shanghai); // 2026-01-05 08:30
+/// ```
+DateTime wallClockOf(DateTime instant, LocalOffset offset) {
+  final shifted = instant.toUtc().add(offset.duration);
+  return DateTime(
+    shifted.year,
+    shifted.month,
+    shifted.day,
+    shifted.hour,
+    shifted.minute,
+  );
+}
+
+/// The instant of the local wall-clock date and time [wallClock] at [offset].
+///
+/// The inverse of [wallClockOf]: only [wallClock]'s
+/// year/month/day/hour/minute are read (seconds and the flag are ignored), so a
+/// date-picker result plus a time-picker result map straight onto a storable
+/// instant and never depend on the machine timezone.
+DateTime instantFromWallClock(DateTime wallClock, LocalOffset offset) =>
+    DateTime.utc(
+      wallClock.year,
+      wallClock.month,
+      wallClock.day,
+      wallClock.hour,
+      wallClock.minute,
+    ).subtract(offset.duration);
+
 /// The date key of the Monday that starts the local week containing [instant].
 DateTime mondayKeyOf(DateTime instant, LocalOffset offset) =>
     _mondayOf(dayKeyOf(instant, offset));

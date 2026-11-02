@@ -15,6 +15,7 @@ library;
 
 import 'dart:async';
 
+import 'package:clock/clock.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -24,6 +25,8 @@ import 'package:caldoo/ai/ai_client.dart' show Network;
 import 'package:caldoo/ai/schemas/meal_analysis.dart' show MealAnalysis;
 import 'package:caldoo/core/providers/app_providers.dart'
     show connectivityProvider, foodRepositoryProvider, mealRepositoryProvider;
+import 'package:caldoo/core/time/date_windows.dart'
+    show LocalOffset, dayKeyOf, instantFromWallClock;
 import 'package:caldoo/core/units/display_units.dart';
 import 'package:caldoo/domain/models/models.dart';
 import 'package:caldoo/features/meals/capture/image_codec.dart'
@@ -35,9 +38,14 @@ import 'package:caldoo/features/meals/review/review_item_card.dart';
 import 'package:caldoo/features/meals/saved_foods/food_suggestion_list.dart';
 import 'package:caldoo/features/meals/saved_foods/label_suggestion_banner.dart';
 import 'package:caldoo/features/meals/saved_foods/saved_food_detail_screen.dart';
+import 'package:caldoo/features/meals/summary/meal_summary_providers.dart'
+    show localOffsetProvider, summaryClockProvider;
 
 import '../../../data/repositories/fake_repositories.dart';
 import '_fakes.dart';
+
+/// A fixed +08:00 offset, so the meal-time row's instant is machine-independent.
+const LocalOffset shanghai = LocalOffset(480);
 
 Future<RecordingMealRepository> _pumpReview(
   WidgetTester tester, {
@@ -53,6 +61,8 @@ Future<RecordingMealRepository> _pumpReview(
     ConnectivityResult.wifi,
   ],
   DisplayUnits? units,
+  LocalOffset? offset,
+  DateTime? now,
 }) async {
   final FakeFoodRepository foodRepo = FakeFoodRepository();
   for (final Food food in foods) {
@@ -79,12 +89,29 @@ Future<RecordingMealRepository> _pumpReview(
           (ref) => Stream<List<ConnectivityResult>>.value(connectivity),
         ),
         if (reviser != null) mealReviserProvider.overrideWithValue(reviser),
+        // The meal-time row resolves the stored instant through the app's own
+        // offset and reads "now" for the picker range; both are pinned when a
+        // test drives the pickers so the result never depends on the machine.
+        if (offset != null) localOffsetProvider.overrideWithValue(offset),
+        if (now != null)
+          summaryClockProvider.overrideWithValue(Clock.fixed(now)),
       ],
       child: units == null ? app : DisplayScope(units: units, child: app),
     ),
   );
   await tester.pumpAndSettle();
   return mealRepo;
+}
+
+/// The label text of the [OutlinedButton.icon] carrying [key].
+String _buttonText(WidgetTester tester, Key key) {
+  // `OutlinedButton.icon` builds a row of icon + label; the label is the Text
+  // inside that row.
+  final Finder label = find.descendant(
+    of: find.byKey(key),
+    matching: find.byType(Text),
+  );
+  return tester.widget<Text>(label.first).data!;
 }
 
 /// Reads a field's current controller text (the displayed value).
@@ -837,5 +864,138 @@ void main() {
         expect(saved.kcal, 180);
       },
     );
+
+    testWidgets(
+      'the meal-time row shows the stored time and saving without touching it '
+      'keeps that exact instant',
+      (WidgetTester tester) async {
+        final Meal stored = Meal(
+          id: 'meal-mis-stamped',
+          // A SQLite round trip hands back a local-flagged instant, so the
+          // fixture is a local-flavoured one too.
+          timestamp: DateTime(2026, 1, 1, 12, 34),
+          mealType: MealType.lunch,
+        );
+        final RecordingMealRepository mealRepo = await _pumpReview(
+          tester,
+          items: <MealItem>[riceItem()],
+          meal: stored,
+          editing: true,
+        );
+
+        // The row speaks the app's local wall clock, not the raw stored field.
+        expect(_buttonText(tester, reviewMealTimeClockKey), '12:34');
+        expect(_buttonText(tester, reviewMealTimeDateKey), contains('1月1日'));
+
+        await _tapVisible(tester, reviewSaveButtonKey);
+        expect(mealRepo.updates, hasLength(1));
+        expect(mealRepo.updates.single.meal.timestamp, stored.timestamp);
+      },
+    );
+
+    testWidgets(
+      'picking a new date moves the meal to that day and the update carries it',
+      (WidgetTester tester) async {
+        // Fixed +08:00 offset and clock so the picker range is deterministic
+        // and the rebuilt instant is offset-based, never machine-timezone based.
+        final Meal stored = Meal(
+          id: 'meal-mis-stamped',
+          timestamp: instantFromWallClock(
+            DateTime(2026, 1, 1, 12, 34),
+            shanghai,
+          ),
+          mealType: MealType.lunch,
+        );
+        final RecordingMealRepository mealRepo = await _pumpReview(
+          tester,
+          items: <MealItem>[riceItem()],
+          meal: stored,
+          editing: true,
+          offset: shanghai,
+          now: instantFromWallClock(DateTime(2026, 1, 5, 9), shanghai),
+        );
+
+        expect(_buttonText(tester, reviewMealTimeDateKey), contains('1月1日'));
+
+        // Open the date picker and accept its current selection (the stored
+        // date), then pick a different one through the calendar grid.
+        await _tapVisible(tester, reviewMealTimeDateKey);
+        expect(find.byType(DatePickerDialog), findsOneWidget);
+        // 3 is the day cell of 2026-01-03 in the opened January 2026 grid.
+        await tester.tap(find.text('3'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('OK'));
+        await tester.pumpAndSettle();
+
+        expect(_buttonText(tester, reviewMealTimeDateKey), contains('1月3日'));
+        // The time of day is preserved by a date-only change.
+        expect(_buttonText(tester, reviewMealTimeClockKey), '12:34');
+
+        await _tapVisible(tester, reviewSaveButtonKey);
+        final Meal saved = mealRepo.updates.single.meal;
+        expect(
+          saved.timestamp,
+          instantFromWallClock(DateTime(2026, 1, 3, 12, 34), shanghai),
+        );
+        // The instant really is on the 3rd under the app's own offset.
+        expect(dayKeyOf(saved.timestamp, shanghai), DateTime.utc(2026, 1, 3));
+      },
+    );
+
+    testWidgets('picking a new time keeps the date and rebuilds the instant', (
+      WidgetTester tester,
+    ) async {
+      final Meal stored = Meal(
+        id: 'meal-mis-stamped',
+        timestamp: instantFromWallClock(DateTime(2026, 1, 1, 12, 34), shanghai),
+        mealType: MealType.lunch,
+      );
+      final RecordingMealRepository mealRepo = await _pumpReview(
+        tester,
+        items: <MealItem>[riceItem()],
+        meal: stored,
+        editing: true,
+        offset: shanghai,
+        now: instantFromWallClock(DateTime(2026, 1, 5, 9), shanghai),
+      );
+
+      await _tapVisible(tester, reviewMealTimeClockKey);
+      expect(find.byType(TimePickerDialog), findsOneWidget);
+      // Switch to keyboard entry and type 08:15 — the dial is untappable in
+      // a widget test, the input fields are not. The picker is 12-hour with an
+      // AM/PM toggle, so typing "08" first lands on 20:xx until AM is picked.
+      await tester.tap(find.byIcon(Icons.keyboard_outlined));
+      await tester.pumpAndSettle();
+      // Scoped to the dialog: the review screen's gram fields are TextFields
+      // too, and `find.byType(TextField).first` would hit one of those.
+      final Finder hourField = find
+          .descendant(
+            of: find.byType(TimePickerDialog),
+            matching: find.byType(TextField),
+          )
+          .first;
+      final Finder minuteField = find
+          .descendant(
+            of: find.byType(TimePickerDialog),
+            matching: find.byType(TextField),
+          )
+          .last;
+      await tester.enterText(hourField, '08');
+      await tester.enterText(minuteField, '15');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('AM'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+
+      expect(_buttonText(tester, reviewMealTimeClockKey), '08:15');
+      expect(_buttonText(tester, reviewMealTimeDateKey), contains('1月1日'));
+
+      await _tapVisible(tester, reviewSaveButtonKey);
+      expect(
+        mealRepo.updates.single.meal.timestamp,
+        instantFromWallClock(DateTime(2026, 1, 1, 8, 15), shanghai),
+      );
+    });
   });
 }

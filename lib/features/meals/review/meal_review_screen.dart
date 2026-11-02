@@ -55,6 +55,8 @@ import 'package:caldoo/ai/schemas/label_link.dart'
     show LabelLinkResult, LabelMatch;
 import 'package:caldoo/ai/schemas/meal_analysis.dart' show MealAnalysis;
 import 'package:caldoo/core/providers/app_providers.dart';
+import 'package:caldoo/core/time/date_windows.dart'
+    show LocalOffset, instantFromWallClock, localDateOfKey, wallClockOf;
 import 'package:caldoo/core/units/display_units.dart';
 import 'package:caldoo/domain/models/models.dart';
 import 'package:caldoo/domain/services/label_linking.dart'
@@ -63,6 +65,8 @@ import 'package:caldoo/features/meals/capture/image_codec.dart'
     show PreparedPhoto;
 import 'package:caldoo/features/meals/summary/meal_summary_card.dart'
     show mealTypeLabel;
+import 'package:caldoo/features/meals/summary/meal_summary_providers.dart'
+    show localOffsetProvider, summaryClockProvider;
 import 'package:caldoo/features/meals/saved_foods/saved_food_picker.dart';
 import 'package:caldoo/features/offline/offline_ui.dart';
 import 'package:caldoo/l10n/app_format.dart';
@@ -123,6 +127,12 @@ const Key reviewSaveButtonKey = Key('review_save_button');
 /// The segments carry no keys ([ButtonSegment] has none); tests tap them by
 /// their `mealTypeLabel` text within this subtree.
 const Key reviewMealTypeSelectorKey = Key('review_meal_type_selector');
+
+/// Key of the 用餐时间 row (the date half opens the date picker).
+const Key reviewMealTimeDateKey = Key('review_meal_time_date');
+
+/// Key of the 用餐时间 row's clock half (opens the time picker).
+const Key reviewMealTimeClockKey = Key('review_meal_time_clock');
 
 /// Key of the live meal-total energy value.
 const Key reviewTotalKcalKey = Key('review_total_kcal');
@@ -197,6 +207,16 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
   /// same-hour capture can be wrong.
   late MealType _mealType;
 
+  /// The instant the meal is attributed to.
+  ///
+  /// Seeded from the route's owning [Meal] and editable through the 用餐时间
+  /// row: a meal recorded at the wrong time (or on the wrong day) moves to the
+  /// day whose log it belongs to, which is exactly what the day/week rollups
+  /// read. Only the wall clock is editable — the stored instant is rebuilt from
+  /// the app's own [LocalOffset] by [instantFromWallClock], never from the
+  /// machine timezone.
+  late DateTime _timestamp;
+
   final TextEditingController _correction = TextEditingController();
 
   String? _error;
@@ -264,6 +284,7 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
     super.initState();
     _warning = widget.draft.warning;
     _mealType = widget.meal.mealType;
+    _timestamp = widget.meal.timestamp;
     _draft = MealReviewDraft(items: widget.draft.items);
     if (_draft.isEmpty) {
       // A malformed / empty draft still gets one editable row so the user can
@@ -298,6 +319,83 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
   void _addItem() {
     _dirty = true;
     setState(() => _draft.addBlankItem(ref.read(reviewIdGeneratorProvider)()));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Meal time
+  // ---------------------------------------------------------------------------
+
+  /// The app's own UTC offset, which every day window resolves with.
+  LocalOffset get _offset => ref.read(localOffsetProvider);
+
+  /// The stored instant as local wall clock — the value the pickers speak.
+  DateTime get _wallClock => wallClockOf(_timestamp, _offset);
+
+  /// Opens the date picker for the meal's local calendar date.
+  ///
+  /// The range is the app's whole plausible history plus a day of headroom, so
+  /// a mis-stamped record can be moved either way; the time of day is kept.
+  Future<void> _pickMealDate() async {
+    final DateTime wallClock = _wallClock;
+    final DateTime now = wallClockOf(
+      ref.read(summaryClockProvider).now(),
+      _offset,
+    );
+    final DateTime lastDate = localDateOfKey(
+      DateTime.utc(now.year, now.month, now.day + 1),
+    );
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: localDateOfKey(wallClock),
+      firstDate: DateTime(2000),
+      lastDate: lastDate,
+      helpText: S.of(context).reviewMealTimeDatePickerTitle,
+    );
+    if (picked == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _dirty = true;
+      _timestamp = instantFromWallClock(
+        DateTime(
+          picked.year,
+          picked.month,
+          picked.day,
+          wallClock.hour,
+          wallClock.minute,
+        ),
+        _offset,
+      );
+    });
+  }
+
+  /// Opens the time picker for the meal's local wall-clock time.
+  ///
+  /// The date half is kept, so a record logged on the wrong day AND hour needs
+  /// the two pickers, each changing exactly what its own label shows.
+  Future<void> _pickMealClock() async {
+    final DateTime wallClock = _wallClock;
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(wallClock),
+      helpText: S.of(context).reviewMealTimeTimePickerTitle,
+    );
+    if (picked == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _dirty = true;
+      _timestamp = instantFromWallClock(
+        DateTime(
+          wallClock.year,
+          wallClock.month,
+          wallClock.day,
+          picked.hour,
+          picked.minute,
+        ),
+        _offset,
+      );
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -668,9 +766,13 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
       _error = null;
     });
     try {
-      // The selector may have corrected the hour-based type guess (or a
-      // stored value on an edit); id, timestamp and note are unchanged.
-      final Meal meal = widget.meal.copyWith(mealType: _mealType);
+      // The selectors may have corrected the hour-based type guess (or a
+      // stored value on an edit) and the meal-time row may have moved the meal
+      // to another day; the id and note are unchanged.
+      final Meal meal = widget.meal.copyWith(
+        mealType: _mealType,
+        timestamp: _timestamp,
+      );
       if (widget.editing) {
         // An edit of an already saved meal: the complete record replaces the
         // stored rows (a removed row must not survive).
@@ -766,6 +868,28 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
               selected: <MealType>{_mealType},
               onSelectionChanged: (Set<MealType> selection) =>
                   setState(() => _mealType = selection.first),
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                S.of(context).reviewMealTimeLabel,
+                style: theme.textTheme.titleSmall,
+              ),
+            ),
+            const SizedBox(height: 8),
+            _MealTimeRow(
+              wallClock: _wallClock,
+              onPickDate: _pickMealDate,
+              onPickClock: _pickMealClock,
+            ),
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                S.of(context).reviewMealTimeHelp,
+                style: theme.textTheme.bodySmall,
+              ),
             ),
             if (_canRevise) ...<Widget>[
               const SizedBox(height: 8),
@@ -950,6 +1074,65 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The 用餐时间 row: the local date and wall clock of the meal, each half
+/// opening its own Material picker.
+///
+/// Two separate affordances rather than one dialog: a record logged at the
+/// wrong time is usually wrong about the hour, while a backfilled meal is
+/// usually wrong about the day, and each picker changes exactly what its own
+/// label shows.
+class _MealTimeRow extends StatelessWidget {
+  const _MealTimeRow({
+    required this.wallClock,
+    required this.onPickDate,
+    required this.onPickClock,
+  });
+
+  /// The meal's local wall clock (only y/m/d/h/min are meaningful).
+  final DateTime wallClock;
+
+  /// Opens the date picker.
+  final VoidCallback onPickDate;
+
+  /// Opens the time picker.
+  final VoidCallback onPickClock;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final String clock =
+        '${wallClock.hour.toString().padLeft(2, '0')}:'
+        '${wallClock.minute.toString().padLeft(2, '0')}';
+    return Row(
+      children: <Widget>[
+        Expanded(
+          child: OutlinedButton.icon(
+            key: reviewMealTimeDateKey,
+            onPressed: onPickDate,
+            icon: const Icon(Icons.calendar_today_outlined, size: 18),
+            label: Text(
+              AppFormat.dateWithWeekday(
+                wallClock,
+                currentYear: DateTime.now().year,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodyMedium,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        OutlinedButton.icon(
+          key: reviewMealTimeClockKey,
+          onPressed: onPickClock,
+          icon: const Icon(Icons.schedule_outlined, size: 18),
+          label: Text(clock, style: theme.textTheme.bodyMedium),
+        ),
+      ],
     );
   }
 }

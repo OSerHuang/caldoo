@@ -225,6 +225,84 @@ void main() {
     });
   });
 
+  group('wall clock <-> instant (the meal-time editor)', () {
+    test('an instant resolves to its local wall clock at the given offset', () {
+      // 2026-01-05 00:30 UTC is 08:30 in Asia/Shanghai.
+      expect(
+        wallClockOf(DateTime.utc(2026, 1, 5, 0, 30), shanghai),
+        DateTime(2026, 1, 5, 8, 30),
+      );
+      // The same instant in UTC is 00:30, on the same date.
+      expect(
+        wallClockOf(DateTime.utc(2026, 1, 5, 0, 30), utc),
+        DateTime(2026, 1, 5, 0, 30),
+      );
+    });
+
+    test('a wall clock builds the instant at the given offset', () {
+      expect(
+        instantFromWallClock(DateTime(2026, 1, 5, 8, 30), shanghai),
+        DateTime.utc(2026, 1, 5, 0, 30),
+      );
+      // A west-of-Greenwich offset moves the instant forward past midnight.
+      expect(
+        instantFromWallClock(
+          DateTime(2026, 1, 5, 8, 30),
+          const LocalOffset(-480),
+        ),
+        DateTime.utc(2026, 1, 5, 16, 30),
+      );
+    });
+
+    test(
+      'the pair round-trips across the offset range and both date sides',
+      () {
+        // A local date is preserved exactly: the wall clock read back from the
+        // instant built out of it is the value the picker produced.
+        for (final LocalOffset offset in <LocalOffset>[
+          utc,
+          shanghai,
+          const LocalOffset(-480),
+          const LocalOffset(840),
+          const LocalOffset(-720),
+        ]) {
+          for (final DateTime wall in <DateTime>[
+            DateTime(2026, 1, 5, 0, 0),
+            DateTime(2026, 1, 5, 23, 59),
+            DateTime(2026, 12, 31, 23, 59),
+            DateTime(2026, 1, 1, 0, 0),
+          ]) {
+            expect(
+              wallClockOf(instantFromWallClock(wall, offset), offset),
+              wall,
+            );
+            // …and the instant lands on that very local calendar day.
+            expect(
+              dayKeyOf(instantFromWallClock(wall, offset), offset),
+              dayKeyFromLocalDate(wall),
+            );
+          }
+        }
+      },
+    );
+
+    test('seconds and the UTC flag on the input are ignored', () {
+      final instant = instantFromWallClock(
+        DateTime.utc(2026, 1, 5, 8, 30, 45, 123),
+        shanghai,
+      );
+      expect(instant, DateTime.utc(2026, 1, 5, 0, 30));
+      expect(instant.second, 0);
+    });
+
+    test('a machine-timezone-flagged instant resolves by its own instant', () {
+      // A local-flagged DateTime carries an instant too, so the offset (not the
+      // flag) decides the wall clock — the editor never reads the machine tz.
+      final local = DateTime.utc(2026, 1, 5, 0, 30).toLocal();
+      expect(wallClockOf(local, shanghai), DateTime(2026, 1, 5, 8, 30));
+    });
+  });
+
   group('LocalOffset guards', () {
     test('rejects offsets outside UTC-12:00..UTC+14:00', () {
       expect(() => LocalOffset(900), throwsA(isA<AssertionError>()));

@@ -14,6 +14,10 @@ UI is Chinese-only.)
 - **Log a meal**: by photo (AI analysis) or typed / keyboard-microphone
   dictation; browse back on the Overview to backfill a past day (the meal
   type is editable). An AI failure never blocks saving
+- **Edit a record**: the meal detail's 编辑 action edits the foods and the meal
+  type, and also the **meal date and time** — a mis-timed record moves to the
+  day it belongs to. The detail card shows the record's own timestamp under
+  the meal type
 - **Food library**: photograph a printed nutrition label to create a food
   entry (one photo may contain several labels); every food is searchable and
   reusable, nutrient values are editable anytime, and logged meals can be
