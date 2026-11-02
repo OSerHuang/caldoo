@@ -90,6 +90,41 @@ void main() {
     );
   });
 
+  testWidgets('the card names the recorded time under the meal type', (
+    WidgetTester tester,
+  ) async {
+    final FakeMealRepository repo = FakeMealRepository();
+    addTearDown(repo.dispose);
+
+    // fixedNow is 2026-01-05 12:00 at +08:00.
+    final Meal lunch = summaryMeal(id: 'meal-lunch', timestamp: fixedNow);
+    await repo.saveMealWithItems(lunch, <MealItem>[summaryRiceItem()]);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mealRepositoryProvider.overrideWithValue(repo),
+          summaryClockProvider.overrideWithValue(fixedShanghaiClock()),
+          localOffsetProvider.overrideWithValue(shanghai),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: MealSummaryCard(
+              meal: lunch,
+              items: <MealItem>[summaryRiceItem()],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // The line resolves the stored instant through the app's own offset, so a
+    // meal recorded at the wrong time is visible as such.
+    expect(_value(tester, mealSummaryTimeKey), '2026年1月5日 12:00');
+    expect(_value(tester, mealSummaryKcalKey), '120');
+  });
+
   testWidgets('day total reflects a later save (live watch stream)', (
     WidgetTester tester,
   ) async {

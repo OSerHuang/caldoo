@@ -349,6 +349,19 @@ class S {
   /// Heading above the review screen's meal-type selector.
   String get reviewMealTypeLabel => '餐次';
 
+  /// Heading above the review screen's meal-time row.
+  String get reviewMealTimeLabel => '用餐时间';
+
+  /// Helper under the review screen's meal-time row: an edit moves the meal to
+  /// another day's log, so the copy says what changing it does.
+  String get reviewMealTimeHelp => '改到别的日期会把这一餐移到那一天';
+
+  /// Title of the meal-time date picker dialog.
+  String get reviewMealTimeDatePickerTitle => '选择用餐日期';
+
+  /// Title of the meal-time time picker dialog.
+  String get reviewMealTimeTimePickerTitle => '选择用餐时间';
+
   /// Heading above a meal's food list.
   String get mealItemsHeading => '本餐食物';
 

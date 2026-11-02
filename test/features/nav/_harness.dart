@@ -47,7 +47,8 @@ class NavTestEnv {
   NavTestEnv()
     : meals = FakeMealRepository(),
       exercises = FakeExerciseRepository(),
-      profile = FakeProfileRepository();
+      profile = FakeProfileRepository(),
+      weights = FakeWeightRepository();
 
   /// The in-memory meal store.
   final FakeMealRepository meals;
@@ -57,6 +58,9 @@ class NavTestEnv {
 
   /// The in-memory profile store.
   final FakeProfileRepository profile;
+
+  /// The in-memory weight-history store (the day page's 体重 card).
+  final FakeWeightRepository weights;
 
   /// The live container after [pump].
   late ProviderContainer container;
@@ -103,6 +107,7 @@ class NavTestEnv {
           mealRepositoryProvider.overrideWithValue(meals),
           exerciseRepositoryProvider.overrideWithValue(exercises),
           profileRepositoryProvider.overrideWithValue(profile),
+          weightRepositoryProvider.overrideWithValue(weights),
           // task-24 daily dashboard time seam
           dashboardClockProvider.overrideWithValue(dashboardClock()),
           dashboardOffsetProvider.overrideWithValue(dashboardOffset),
@@ -149,6 +154,7 @@ class NavTestEnv {
     await meals.dispose();
     await exercises.dispose();
     await profile.dispose();
+    await weights.dispose();
     await _ownedDb?.close();
     _ownedDb = null;
   }
