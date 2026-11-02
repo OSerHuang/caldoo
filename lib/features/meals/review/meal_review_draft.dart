@@ -137,13 +137,21 @@ class ReviewItem {
   /// Sets the consumed weight.
   ///
   /// Delegates the scaling/recompute to [MealItemEditor] (proportional for AI
-  /// items, per-100 g for label items) and clears the per-field overrides,
-  /// because a grams edit recomputes every nutrient from the source of truth.
-  /// Malformed grams (negative / NaN / infinite) propagate the editor's
+  /// items, per-100 g for label items). Whenever the editor actually
+  /// recomputes from a source of truth — a chosen food's per-100 g values, or
+  /// a positive base weight to scale — the per-field overrides are cleared, or
+  /// they would freeze the previous value on top of the fresh numbers.
+  ///
+  /// A row with no basis (a manually added blank row, or an AI row that
+  /// returned grams 0) cannot rescale: the overrides ARE the values there, so
+  /// they are kept and the grams edit changes the weight only. Malformed
+  /// grams (negative / NaN / infinite) propagate the editor's
   /// [ArgumentError] so the UI layer can ignore them.
   void editGrams(double grams) {
     _editor.editGrams(grams);
-    _clearOverrides();
+    if (_editor.hasChosenFood || _editor.aiItem.grams > 0) {
+      _clearOverrides();
+    }
     _userEdited = true;
   }
 
