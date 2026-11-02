@@ -37,6 +37,19 @@ List<WeightEntry> entriesWithinDays(
   ];
 }
 
+/// The entry recorded on [dayKey], or `null` when that day has none.
+///
+/// Day pages other than today render the weight card only for days that were
+/// actually recorded, so this is the gate for "does this day have a weight?".
+WeightEntry? weightOnDay(List<WeightEntry> entries, DateTime dayKey) {
+  for (final WeightEntry entry in entries) {
+    if (entry.dayKey.isAtSameMomentAs(dayKey)) {
+      return entry;
+    }
+  }
+  return null;
+}
+
 /// The change from the latest entry back to the first entry within the
 /// [lookbackDays] before it (`[latest - lookbackDays, latest - 1]`).
 ///
@@ -51,26 +64,39 @@ double? deltaOverDays(
   if (entries.length < 2) {
     return null;
   }
-  final WeightEntry latest = entries.last;
-  final DateTime windowEnd = latest.dayKey.subtract(const Duration(days: 1));
+  return deltaEndingOn(entries, entries.last.dayKey, lookbackDays);
+}
+
+/// The change of the weight recorded on [dayKey] against the first entry
+/// within the [lookbackDays] before it (`[dayKey - lookbackDays, dayKey - 1]`).
+///
+/// The day-page card uses this on a past day: the same "近7天" arithmetic as
+/// the today card, anchored on the day being viewed instead of the newest
+/// entry. Falls back to the closest earlier entry when the window is empty, so
+/// a sparse log still shows its real trend. `null` when [dayKey] has no record
+/// or nothing was recorded before it.
+double? deltaEndingOn(
+  List<WeightEntry> entries,
+  DateTime dayKey,
+  int lookbackDays,
+) {
+  final WeightEntry? anchor = weightOnDay(entries, dayKey);
+  if (anchor == null) {
+    return null;
+  }
+  final List<WeightEntry> earlier = <WeightEntry>[
+    for (final WeightEntry entry in entries)
+      if (entry.dayKey.isBefore(dayKey)) entry,
+  ];
+  if (earlier.isEmpty) {
+    return null;
+  }
+  final DateTime windowEnd = dayKey.subtract(const Duration(days: 1));
   final List<WeightEntry> window = entriesWithinDays(
-    entries,
+    earlier,
     windowEnd,
     lookbackDays,
   );
-  final WeightEntry? baseline = window.isNotEmpty
-      ? window.first
-      : _closestBefore(entries, windowEnd);
-  return baseline == null ? null : latest.weightKg - baseline.weightKg;
-}
-
-/// The closest entry strictly before [dayKey], or `null`.
-WeightEntry? _closestBefore(List<WeightEntry> entries, DateTime dayKey) {
-  WeightEntry? best;
-  for (final WeightEntry entry in entries) {
-    if (entry.dayKey.isBefore(dayKey)) {
-      best = entry;
-    }
-  }
-  return best;
+  final WeightEntry baseline = window.isNotEmpty ? window.first : earlier.last;
+  return anchor.weightKg - baseline.weightKg;
 }

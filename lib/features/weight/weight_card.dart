@@ -1,13 +1,14 @@
-/// The 体重 card on the dashboard's day page (today only).
+/// The 体重 card on the dashboard's day pages.
 ///
 /// A compact window on the weight history: the latest value, the 7-day change
 /// and a 30-day sparkline, plus a 记录 action opening the entry sheet. Tapping
 /// the card opens the full trend page (`/today/weight`). With no recorded
 /// weight it is a one-line prompt instead of an empty chart.
 ///
-/// The card renders TODAY's state regardless of which day page it sits on
-/// (the weight log is a "current self" metric, not a per-day rollup), which is
-/// why it is mounted only on the today page.
+/// On TODAY's page the card shows the newest entry (the weight log is a
+/// "current self" metric), so it reflects the history even when today itself
+/// was not measured. On a PAST day's page it is mounted only when that day has
+/// an entry, and then shows exactly that day (see [dayKey]).
 library;
 
 import 'package:fl_chart/fl_chart.dart';
@@ -33,13 +34,19 @@ const Key weightCardRecordKey = Key('weight_card_record');
 /// Key of the card's latest-weight value.
 const Key weightCardValueKey = Key('weight_card_value');
 
-/// The compact weight card for the today page.
+/// The compact weight card for a day page.
 class WeightCard extends ConsumerWidget {
-  /// Creates the card; [todayKey] bounds the sparkline window.
-  const WeightCard({super.key, required this.todayKey});
+  /// Creates the card for [dayKey]; [isToday] selects "newest" vs "that day".
+  const WeightCard({super.key, required this.dayKey, this.isToday = true});
 
   /// The date-only key of the day the card is rendered on.
-  final DateTime todayKey;
+  final DateTime dayKey;
+
+  /// Whether this card sits on today's page.
+  ///
+  /// Today shows the newest record (the "current self" reading); a past day
+  /// shows the record of that day only, since the page is about that day.
+  final bool isToday;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -47,16 +54,18 @@ class WeightCard extends ConsumerWidget {
     final AsyncValue<List<WeightEntry>> entries = ref.watch(
       weightEntriesProvider,
     );
-    // The page mounts the card only when the history is non-empty, so the
+    // The page mounts the card only when it has something to show, so the
     // loading / error / empty cases degrade to "nothing" instead of taking
     // vertical space on the dense day page.
     return entries.maybeWhen(
       data: (List<WeightEntry> data) {
-        final WeightEntry? latest = latestWeightOf(data);
-        if (latest == null) {
+        final WeightEntry? shown = isToday
+            ? latestWeightOf(data)
+            : weightOnDay(data, dayKey);
+        if (shown == null) {
           return const SizedBox.shrink();
         }
-        final double? delta7d = deltaOverDays(data, todayKey, 7);
+        final double? delta7d = deltaEndingOn(data, shown.dayKey, 7);
         return AppCard(
           key: weightCardKey,
           onTap: () => context.push('/today/weight'),
@@ -76,7 +85,7 @@ class WeightCard extends ConsumerWidget {
                   FilledButton.tonalIcon(
                     key: weightCardRecordKey,
                     onPressed: () =>
-                        showWeightEntrySheet(context, initialDay: todayKey),
+                        showWeightEntrySheet(context, initialDay: dayKey),
                     icon: const Icon(Icons.add, size: 18),
                     label: Text(S.of(context).weightRecordAction),
                     style: FilledButton.styleFrom(
@@ -90,7 +99,7 @@ class WeightCard extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: <Widget>[
                   Text(
-                    '${AppFormat.number(latest.weightKg)} kg',
+                    '${AppFormat.number(shown.weightKg)} kg',
                     key: weightCardValueKey,
                     style: theme.textTheme.headlineSmall!.copyWith(
                       fontFeatures: const <FontFeature>[
@@ -118,7 +127,7 @@ class WeightCard extends ConsumerWidget {
               SizedBox(
                 height: 56,
                 child: _WeightSparkline(
-                  entries: entriesWithinDays(data, todayKey, 30),
+                  entries: entriesWithinDays(data, shown.dayKey, 30),
                 ),
               ),
             ],

@@ -24,6 +24,8 @@ void main() {
   Future<FakeWeightRepository> pumpCard(
     WidgetTester tester, {
     List<WeightEntry> entries = const <WeightEntry>[],
+    DateTime? dayKey,
+    bool isToday = true,
   }) async {
     final FakeWeightRepository repo = FakeWeightRepository();
     for (final WeightEntry entry in entries) {
@@ -36,7 +38,9 @@ void main() {
           dashboardTodayKeyProvider.overrideWithValue(todayKey),
         ],
         child: MaterialApp(
-          home: Scaffold(body: WeightCard(todayKey: todayKey)),
+          home: Scaffold(
+            body: WeightCard(dayKey: dayKey ?? todayKey, isToday: isToday),
+          ),
         ),
       ),
     );
@@ -87,6 +91,40 @@ void main() {
       await tester.pumpAndSettle();
 
       expect((await repo.getDay(todayKey))!.weightKg, 67.9);
+    });
+
+    testWidgets('a past day with a record shows THAT day, not the newest', (
+      WidgetTester tester,
+    ) async {
+      await pumpCard(
+        tester,
+        entries: <WeightEntry>[
+          WeightEntry(dayKey: DateTime.utc(2026, 10, 5), weightKg: 69.0),
+          WeightEntry(dayKey: DateTime.utc(2026, 10, 20), weightKg: 68.7),
+          WeightEntry(dayKey: DateTime.utc(2026, 10, 30), weightKg: 68.4),
+        ],
+        dayKey: DateTime.utc(2026, 10, 20),
+        isToday: false,
+      );
+      expect(find.text('68.7 kg'), findsOneWidget);
+      // 68.7 - 69.0 = -0.3 against the closest earlier entry (10/5 is outside
+      // the 10/13..10/19 window, so the fallback applies).
+      expect(find.text('−0.3 · 近7天'), findsOneWidget);
+    });
+
+    testWidgets('a past day without a record renders nothing', (
+      WidgetTester tester,
+    ) async {
+      await pumpCard(
+        tester,
+        entries: <WeightEntry>[
+          WeightEntry(dayKey: DateTime.utc(2026, 10, 5), weightKg: 69.0),
+          WeightEntry(dayKey: DateTime.utc(2026, 10, 30), weightKg: 68.4),
+        ],
+        dayKey: DateTime.utc(2026, 10, 20),
+        isToday: false,
+      );
+      expect(find.byKey(weightCardKey), findsNothing);
     });
   });
 

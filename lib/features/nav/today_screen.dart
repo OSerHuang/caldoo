@@ -365,17 +365,18 @@ class _DayPageBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // The weight card mounts only when weight history EXISTS: the day page's
+    // The weight card mounts only when it has a value to show: the day page's
     // hero + quick-add + log fill a phone viewport on their own, so an
     // empty-state card would push the log below the fold for users who never
-    // record weight. Discovery lives on the 我的 tab (体重 entry); once a
-    // first weight is recorded the card appears here, right under the
-    // quick-add actions.
-    final AsyncValue<List<WeightEntry>> weightEntries = isToday
-        ? ref.watch(weightEntriesProvider)
-        : const AsyncValue<List<WeightEntry>>.data(<WeightEntry>[]);
+    // record weight. Discovery lives on the 我的 tab (体重 entry). Today shows
+    // the newest record; a past day shows only its own record, so browsing the
+    // history never repeats today's weight on a day that was not measured.
+    final AsyncValue<List<WeightEntry>> weightEntries = ref.watch(
+      weightEntriesProvider,
+    );
     final bool showWeightCard = weightEntries.maybeWhen(
-      data: (List<WeightEntry> entries) => entries.isNotEmpty,
+      data: (List<WeightEntry> entries) =>
+          isToday ? entries.isNotEmpty : weightOnDay(entries, dayKey) != null,
       orElse: () => false,
     );
 
@@ -414,7 +415,7 @@ class _DayPageBody extends ConsumerWidget {
         ),
         if (showWeightCard) ...<Widget>[
           const SizedBox(height: 16),
-          WeightCard(todayKey: dayKey),
+          WeightCard(dayKey: dayKey, isToday: isToday),
         ],
         const SizedBox(height: 24),
         SectionHeader(
