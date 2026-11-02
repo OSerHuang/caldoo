@@ -22,8 +22,9 @@ import 'package:caldoo/domain/models/food.dart';
 import 'package:caldoo/features/meals/label/label_capture_controller.dart';
 import 'package:caldoo/features/meals/label/label_capture_screen.dart';
 import 'package:caldoo/features/meals/label/label_draft.dart';
+import 'package:caldoo/features/settings/ai_settings.dart';
 import 'package:caldoo/features/settings/settings_providers.dart'
-    show aiClientProvider;
+    show aiClientProvider, aiSettingsConfigProvider;
 
 import '../../../data/repositories/fake_repositories.dart';
 import '../../../ai/schemas/fixture_support.dart';
@@ -129,6 +130,11 @@ void main() {
       ProviderScope(
         overrides: [
           aiClientProvider.overrideWithValue(client),
+          // parse() awaits the config before reading the client; pin it so the
+          // test never constructs the production database.
+          aiSettingsConfigProvider.overrideWith(
+            (ref) async => AiSettings.defaults,
+          ),
           labelPhotoSourceProvider.overrideWithValue(
             source ?? (LabelPhotoLane lane) async => photo,
           ),
@@ -593,6 +599,9 @@ void main() {
       final ProviderContainer container = ProviderContainer(
         overrides: [
           aiClientProvider.overrideWithValue(client),
+          aiSettingsConfigProvider.overrideWith(
+            (ref) async => AiSettings.defaults,
+          ),
           labelPhotoSourceProvider.overrideWithValue(
             (LabelPhotoLane lane) async => photo,
           ),
