@@ -1,5 +1,4 @@
-/// Versioned zh-CN prompt for the label-link call (design
-/// `design/label-linking.md` §4.5).
+/// Versioned zh-CN prompt for the label-link call.
 ///
 /// Link is the *second* AI call of the analyze-then-link flow: after the meal
 /// has been analysed, this prompt asks the model to match each analysed item

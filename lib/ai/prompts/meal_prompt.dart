@@ -6,8 +6,8 @@
 /// salt grams; the label mode owns sodium).
 ///
 /// The prompts are self-contained: they carry **no** saved-food library data.
-/// Matching a meal item to a stored label is a separate `link` call (see
-/// `design/label-linking.md`); analysis only estimates the meal.
+/// Matching a meal item to a stored label is a separate `link` call;
+/// analysis only estimates the meal.
 ///
 /// Bump [mealPhotoPromptVersion] / [mealTextPromptVersion] /
 /// [mealRevisionPromptVersion] whenever the text changes and re-record.

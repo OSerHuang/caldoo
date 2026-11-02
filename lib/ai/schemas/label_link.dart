@@ -1,5 +1,4 @@
-/// Wire model + strict tool schema for the label-link call (design
-/// `design/label-linking.md` §4).
+/// Wire model + strict tool schema for the label-link call.
 ///
 /// Meal analysis (`emit_meal_items`) and saved-food matching used to share one
 /// call: the analysis prompt carried the user's library as a hint and the

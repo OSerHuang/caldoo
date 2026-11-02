@@ -7,7 +7,7 @@
 /// inferred food name) and [labelLinkPrompt] (analysed meal items + the saved-label index -> candidate
 /// label indices; the second call of analyze-then-link).
 /// The analysis prompts deliberately carry **no** saved-food data: matching is
-/// the link call's job (see `design/label-linking.md`).
+/// the link call's job.
 /// Each render carries the strict tool name it targets and its version.
 library;
 
