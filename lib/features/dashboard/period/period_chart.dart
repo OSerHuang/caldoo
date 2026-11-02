@@ -7,15 +7,16 @@
 ///
 /// * **one bar group per day**, in the period's calendar order, carrying the
 ///   day's **intake** bar and — on the week card only — the day's **burn** bar
-///   (that logged day's budget: BMR + exercise). The month card deliberately
-///   sets [periodChartData]'s `showBurnBars` to `false`: 31 days × 2 six-pixel
-///   rods cannot be told apart on a phone, so the month's burn stays in the
-///   tooltip and the totals rather than the plot.
+///   (that logged day's expenditure: BMR + exercise). The month card
+///   deliberately sets [periodChartData]'s `showBurnBars` to `false`:
+///   31 days × 2 six-pixel rods cannot be told apart on a phone, so the
+///   month's burn stays in the tooltip and the totals rather than the plot.
 /// * **a dashed target line** at the profile's resolved BMR (the user's own
-///   override or the Mifflin-St Jeor estimate, excluding exercise), labelled
-///   [periodTargetLineLabel] so it can never be confused with the daily
-///   dashboard's `今日额度(含运动)`. The line is a single flat reference
-///   because one line cannot represent per-day exercise-varying budgets.
+///   override or the Mifflin-St Jeor estimate, excluding exercise and
+///   regardless of any set goal), labelled [periodTargetLineLabel] so it can
+///   never be confused with the daily dashboard's `今日额度(含运动)`. The line
+///   is a single flat reference because one line cannot represent per-day
+///   exercise-varying budgets.
 /// * **a long-press tooltip bubble** naming the touched day (the weekday on the
 ///   week card, `1月5日` on the month card) plus its intake, burn (BMR +
 ///   exercise) and signed difference, in the display preference's energy unit
@@ -210,7 +211,7 @@ class PeriodTooltipTheme {
 /// The long-press tooltip content for one chart day: the [title] and — for a
 /// logged day — its intake, burn (BMR + exercise) and signed difference.
 ///
-/// A missing profile ([baseBudgetKcal] `null`) only reports intake; an unlogged
+/// A missing profile ([bmrKcal] `null`) only reports intake; an unlogged
 /// day reports `logged: false` so the bubble says `未记录` rather than a row of
 /// zeros. The title is a parameter (rather than derived from [day]) because the
 /// week card names the weekday while the month card names the calendar date.
@@ -222,7 +223,7 @@ class PeriodTooltipTheme {
 /// canonical kcal.
 PeriodDayTooltip periodDayTooltip({
   required DayRollup day,
-  required int? baseBudgetKcal,
+  required int? bmrKcal,
   required String title,
   DisplayUnits units = DisplayUnits.defaults,
 }) {
@@ -241,8 +242,8 @@ PeriodDayTooltip periodDayTooltip({
       kcal: day.intakeKcal,
     ),
   ];
-  if (baseBudgetKcal != null) {
-    final int burn = periodBurnFor(day, baseBudgetKcal);
+  if (bmrKcal != null) {
+    final int burn = periodBurnFor(day, bmrKcal);
     rows
       ..add(
         PeriodTooltipRow(
@@ -339,8 +340,12 @@ BarTooltipItem _periodTooltipItem({
 
 /// Builds the `fl_chart` data for a period: one bar group per entry of [days]
 /// (in order), each with an intake bar plus — when [showBurnBars] and
-/// [baseBudgetKcal] are both known — the day's burn bar (base + exercise), and
-/// the dashed target line.
+/// [bmrKcal] are both known — the day's burn bar (BMR + exercise), and the
+/// dashed target line at [bmrKcal].
+///
+/// [bmrKcal] is the profile's resolved BMR — never the user's goal, which is
+/// a diet target, not expended energy, and must not shift the burn bars, the
+/// line or the axis when it differs from the BMR.
 ///
 /// [xLabels] supplies the bottom-axis labels, one per day; [labelEvery] thins
 /// them out (the month card labels every fifth day so its 31 day numbers stay
@@ -364,7 +369,7 @@ BarTooltipItem _periodTooltipItem({
 /// only ~9 px wide, the week keeps the historical 6.
 ///
 /// The y-axis top covers exactly what is drawn: the intake bars, plus the burn
-/// bars when [showBurnBars] is set, plus the target line's budget. The month
+/// bars when [showBurnBars] is set, plus the target line's BMR. The month
 /// card hides the burn rods, so their values deliberately do not enlarge its
 /// axis — the tooltip and the totals still report burn.
 ///
@@ -376,7 +381,7 @@ BarTooltipItem _periodTooltipItem({
 BarChartData periodChartData({
   required List<DayRollup> days,
   required List<String> xLabels,
-  required int? baseBudgetKcal,
+  required int? bmrKcal,
   bool showBurnBars = true,
   double rodWidth = 14,
   int labelEvery = 1,
@@ -398,17 +403,17 @@ BarChartData periodChartData({
   // the rods, the target line and the axis labels share one (display) scale.
   // With the default kcal preference this is the identity and the chart is
   // pixel-identical to the historical one.
-  final int? displayBaseBudgetKcal = baseBudgetKcal == null
+  final int? displayBmrKcal = bmrKcal == null
       ? null
-      : units.energyValue(baseBudgetKcal);
-  final bool drawBurnBars = showBurnBars && displayBaseBudgetKcal != null;
-  var top = displayBaseBudgetKcal?.toDouble() ?? 0.0;
+      : units.energyValue(bmrKcal);
+  final bool drawBurnBars = showBurnBars && displayBmrKcal != null;
+  var top = displayBmrKcal?.toDouble() ?? 0.0;
   for (final day in days) {
     top = math.max(top, units.energyValue(day.intakeKcal).toDouble());
     if (drawBurnBars) {
       top = math.max(
         top,
-        units.energyValue(periodBurnFor(day, baseBudgetKcal)).toDouble(),
+        units.energyValue(periodBurnFor(day, bmrKcal)).toDouble(),
       );
     }
   }
@@ -439,9 +444,7 @@ BarChartData periodChartData({
             ),
             if (drawBurnBars)
               _periodBarRod(
-                units
-                    .energyValue(periodBurnFor(days[i], baseBudgetKcal))
-                    .toDouble(),
+                units.energyValue(periodBurnFor(days[i], bmrKcal)).toDouble(),
                 burn,
                 rodWidth,
               ),
@@ -507,9 +510,9 @@ BarChartData periodChartData({
     borderData: FlBorderData(show: false),
     extraLinesData: ExtraLinesData(
       horizontalLines: <HorizontalLine>[
-        if (displayBaseBudgetKcal != null)
+        if (displayBmrKcal != null)
           HorizontalLine(
-            y: displayBaseBudgetKcal.toDouble(),
+            y: displayBmrKcal.toDouble(),
             color: line,
             strokeWidth: 2,
             dashArray: periodTargetLineDashArray,
@@ -542,7 +545,7 @@ BarChartData periodChartData({
               return _periodTooltipItem(
                 tooltip: periodDayTooltip(
                   day: days[groupIndex],
-                  baseBudgetKcal: baseBudgetKcal,
+                  bmrKcal: bmrKcal,
                   title: tooltipTitle(days[groupIndex]),
                   units: units,
                 ),
@@ -590,15 +593,18 @@ BarChartRodData _periodBarRod(double toY, Color color, double width) =>
     );
 
 /// The burn [day] contributes to the chart and to the period's totals: the
-/// day's budget (`base + exercise`) for a logged day, otherwise zero.
+/// day's expenditure (`bmr + exercise`) for a logged day, otherwise zero.
+///
+/// [bmrKcal] is the profile's resolved BMR — never the user's goal, which is
+/// a diet target, not expended energy.
 ///
 /// Exposed (not private) so the widget tests can state the expected burn bars
 /// without duplicating the rule.
-int periodBurnFor(DayRollup day, int? baseBudgetKcal) {
-  if (baseBudgetKcal == null || day.mealCount < 1) {
+int periodBurnFor(DayRollup day, int? bmrKcal) {
+  if (bmrKcal == null || day.mealCount < 1) {
     return 0;
   }
-  return baseBudgetKcal + day.exerciseKcal;
+  return bmrKcal + day.exerciseKcal;
 }
 
 /// The y-axis tick step for a period whose highest bar / budget is [top].

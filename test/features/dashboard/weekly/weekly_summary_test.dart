@@ -2,8 +2,8 @@
 ///
 /// Locks the exact rules from the plan: a logged day needs `>= 1` MEAL
 /// (exercise-only days do not count), the week shows CUMULATIVE totals (never
-/// averages) over logged days only, the target line is the BASE budget
-/// (exercise excluded) and salt adherence is `adherent / logged`.
+/// averages) over logged days only, the target line is the BMR (exercise
+/// excluded, goal ignored) and salt adherence is `adherent / logged`.
 library;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -79,12 +79,42 @@ void main() {
     });
   });
 
-  group('target line = BASE budget (= BMR, exercise EXCLUDED)', () {
-    test('base budget is 1979, not the 2236 exercise-inclusive budget', () {
+  group('the chart base is the BMR, never the goal', () {
+    test('no goal: BMR is 1979, not the 2236 exercise-inclusive budget', () {
       final WeeklySummary summary = _ready(_fixtureWeek());
-      expect(summary.baseBudgetKcal, 1979);
-      expect(summary.baseBudgetKcal, isNot(2236));
+      expect(summary.bmrKcal, 1979);
+      expect(summary.bmrKcal, isNot(2236));
     });
+
+    test(
+      'a set goal does not move the burn, the line base or the difference',
+      () {
+        // The 1800 kcal goal deliberately differs from the 1979 BMR: if the
+        // goal ever leaked into the burn (the goal-based-base regression) the
+        // burn would read 5*1800 + 257 = 9257 and the difference +743.
+        final WeeklySummaryState state = buildWeeklySummary(
+          week: _fixtureWeek(),
+          profile: weeklyProfile.copyWith(dailyKcalGoalOverride: 1800),
+          today: weeklyNow,
+        );
+        final WeeklySummary summary = switch (state) {
+          final WeeklySummaryReady ready => ready.summary,
+          _ => fail('expected ready, got ${state.runtimeType}'),
+        };
+        expect(summary.bmrKcal, 1979);
+        expect(summary.bmrKcal, isNot(1800));
+        expect(summary.goalKcal, 1800);
+        // Burn stays BMR + exercise: 5*1979 + 257, NOT 5*1800 + 257.
+        expect(summary.totalBurnKcal, 10152);
+        expect(summary.totalBurnKcal, isNot(9257));
+        // Difference stays intake - (BMR + exercise): -152, NOT +743.
+        expect(summary.totalBalanceKcal, -152);
+        expect(summary.totalBalanceKcal, isNot(743));
+        // The goal's own metric: Tue 1500 and Thu 1800 are <= 1800; Mon
+        // 2000, Wed 2200 and Fri 2500 are not.
+        expect(summary.goalAdherentDays, 2);
+      },
+    );
   });
 
   group('salt adherence = adherent logged days / logged days', () {

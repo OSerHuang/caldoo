@@ -6,7 +6,7 @@
 /// * exactly 31 calendar-day groups, each with **one intake bar** (the burn
 ///   rods are deliberately not plotted on a month — see the view's doc — so the
 ///   burn series stays in the tooltip and the totals);
-/// * the dashed target line's `y` = the BASE budget 1979 (= BMR, exercise
+/// * the dashed target line's `y` = the BMR 1979 (= the resolved BMR, exercise
 ///   EXCLUDED), its dash array and its `基础代谢(不含运动)` label;
 /// * the bottom axis labels every fifth day (`1 6 11 16 21 26 31`), so 31 day
 ///   numbers do not collide at phone width;
@@ -207,7 +207,7 @@ void main() {
       expect(find.text('2'), findsNothing);
       expect(find.text('27'), findsNothing);
 
-      // --- Dashed target line at the BASE budget (exercise excluded). ---
+      // --- Dashed target line at the BMR (exercise excluded, goal ignored). ---
       final HorizontalLine line =
           chart.data.extraLinesData.horizontalLines.single;
       expect(line.y, 1979, reason: 'base = BMR override 1979');
@@ -525,10 +525,7 @@ void main() {
     ];
 
     test('31 groups, one rod each, 6 px wide, maxY 3000 at a 1000 step', () {
-      final BarChartData data = monthlyChartData(
-        days: month(),
-        baseBudgetKcal: 1979,
-      );
+      final BarChartData data = monthlyChartData(days: month(), bmrKcal: 1979);
       expect(data.barGroups.length, 31);
       expect(
         data.barGroups.every((BarChartGroupData g) => g.barRods.length == 1),
@@ -557,7 +554,7 @@ void main() {
       expect(february2028, hasLength(29));
       final BarChartData leap = monthlyChartData(
         days: february2028,
-        baseBudgetKcal: 1979,
+        bmrKcal: 1979,
       );
       expect(leap.barGroups.length, 29);
 
@@ -567,10 +564,7 @@ void main() {
       ];
       expect(february2026, hasLength(28));
       expect(
-        monthlyChartData(
-          days: february2026,
-          baseBudgetKcal: 1979,
-        ).barGroups.length,
+        monthlyChartData(days: february2026, bmrKcal: 1979).barGroups.length,
         28,
       );
     });
@@ -580,10 +574,7 @@ void main() {
       // group whose expanded band contains the press, so a horizontal band of 6
       // (the week card's value) would attribute the left half of every bar to
       // the previous day. The month card must keep it at 1.
-      final BarChartData data = monthlyChartData(
-        days: month(),
-        baseBudgetKcal: 1979,
-      );
+      final BarChartData data = monthlyChartData(days: month(), bmrKcal: 1979);
       // [EdgeInsets.horizontal] is left + right, so 1 px a side is 2 px total.
       final EdgeInsets band = data.barTouchData.touchExtraThreshold;
       expect(band.left, 1);
@@ -618,7 +609,7 @@ void main() {
       () {
         final BarChartData data = monthlyChartData(
           days: month(),
-          baseBudgetKcal: 1979,
+          bmrKcal: 1979,
           tooltipTheme: PeriodTooltipTheme.light,
         );
         final BarTouchTooltipData touch = data.barTouchData.touchTooltipData;
@@ -658,10 +649,7 @@ void main() {
     );
 
     test('an unlogged day reports 未记录 instead of zero rows', () {
-      final BarChartData data = monthlyChartData(
-        days: month(),
-        baseBudgetKcal: 1979,
-      );
+      final BarChartData data = monthlyChartData(days: month(), bmrKcal: 1979);
       final BarChartGroupData group = data.barGroups[6]; // day 7, unlogged
       final String text = _tooltipText(
         data.barTouchData.touchTooltipData.getTooltipItem(
@@ -677,10 +665,7 @@ void main() {
     });
 
     test('without a profile the tooltip only reports intake', () {
-      final BarChartData data = monthlyChartData(
-        days: month(),
-        baseBudgetKcal: null,
-      );
+      final BarChartData data = monthlyChartData(days: month(), bmrKcal: null);
       expect(data.extraLinesData.horizontalLines, isEmpty);
       final BarChartGroupData group = data.barGroups[0]; // day 1
       final String text = _tooltipText(
@@ -699,7 +684,7 @@ void main() {
     test('the rendered chart uses the legible light tooltip bubble', () {
       final BarChartData data = monthlyChartData(
         days: month(),
-        baseBudgetKcal: 1979,
+        bmrKcal: 1979,
         tooltipTheme: PeriodTooltipTheme.light,
       );
       expect(
@@ -712,7 +697,7 @@ void main() {
       const DisplayUnits kj = DisplayUnits(energy: EnergyDisplay.kj);
       final BarChartData data = monthlyChartData(
         days: month(),
-        baseBudgetKcal: 1979,
+        bmrKcal: 1979,
         units: kj,
       );
       expect(
@@ -750,7 +735,7 @@ void main() {
       const DisplayUnits kj = DisplayUnits(energy: EnergyDisplay.kj);
       final BarChartData data = monthlyChartData(
         days: month(),
-        baseBudgetKcal: 1979,
+        bmrKcal: 1979,
         units: kj,
         tooltipTheme: PeriodTooltipTheme.light,
       );
@@ -778,7 +763,7 @@ void main() {
       // The tooltip model keeps the canonical kcal ints.
       final PeriodDayTooltip model = periodDayTooltip(
         day: dayFor(20),
-        baseBudgetKcal: 1979,
+        bmrKcal: 1979,
         title: monthlyTooltipTitle(dayFor(20)),
         units: kj,
       );
