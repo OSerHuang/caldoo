@@ -30,7 +30,7 @@ import 'package:caldoo/ai/schemas/label_link.dart';
 import 'package:caldoo/domain/models/models.dart';
 import 'package:caldoo/domain/services/label_linking.dart';
 import 'package:caldoo/features/settings/settings_providers.dart'
-    show aiClientProvider;
+    show aiClientProvider, aiSettingsConfigProvider;
 
 /// Matches [items] against [foods]; [userText] is the capture text (non-empty
 /// in production: only a text capture ever calls this linker).
@@ -65,6 +65,10 @@ final Provider<LabelLinker> labelLinkerProvider = Provider<LabelLinker>((ref) {
       ],
       userText: userText,
     );
+    // Cold-start guard: the client must be built against the loaded saved
+    // config, not the defaults, or the request would carry the user's key to
+    // the default endpoint (same guard as saveAndTestConnection).
+    await ref.read(aiSettingsConfigProvider.future);
     final String arguments = await ref
         .read(aiClientProvider)
         .completeWithTool(
