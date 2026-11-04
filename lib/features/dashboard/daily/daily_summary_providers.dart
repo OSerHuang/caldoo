@@ -179,7 +179,16 @@ final dailySummaryForDayProvider = Provider.family<DailySummaryState, DateTime>(
         (profile.isLoading && !profile.hasValue) ||
         (meals.isLoading && !meals.hasValue) ||
         (exercises.isLoading && !exercises.hasValue);
-    if (stillLoading) {
+    // An ERRORED stream must not fall through to a zero day: its `.value` is
+    // null, so the rollup would claim 摄入 0 against a full budget — a lie
+    // worse than a spinner. Stay on the loading state; the meal list under the
+    // card carries the retry UI for the underlying failure.
+    final bool unavailable =
+        stillLoading ||
+        profile.hasError ||
+        meals.hasError ||
+        exercises.hasError;
+    if (unavailable) {
       return const DailySummaryLoading();
     }
 
