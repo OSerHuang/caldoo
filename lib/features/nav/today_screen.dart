@@ -181,7 +181,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
               children: <Widget>[
                 _dayPager(todayKey),
                 if (_visited.contains(DashboardView.week))
-                  _weekPager(currentMonday)
+                  _weekPager(currentMonday, todayKey)
                 else
                   const SizedBox.shrink(),
                 if (_visited.contains(DashboardView.month))
@@ -216,8 +216,12 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     );
   }
 
-  /// The week view's pager: offset 0 is the current Mon..Sun week.
-  Widget _weekPager(DateTime currentMonday) {
+  /// The week view's pager: offset 0 is the current Mon..Sun week. [todayKey]
+  /// is the wall-clock date the 概览 year rule is judged against — the current
+  /// week's Monday is the WRONG reference there, because in the first days of
+  /// January that Monday is still in the previous year and the rule would
+  /// invert (past-year endpoints losing their year, current-year ones gain).
+  Widget _weekPager(DateTime currentMonday, DateTime todayKey) {
     return HistoryPeriodPager(
       id: 'week',
       previousTooltip: S.of(context).historyPreviousWeek,
@@ -231,7 +235,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
         return AppFormat.dateRange(
           monday,
           monday.add(const Duration(days: 6)),
-          currentYear: currentMonday.year,
+          currentYear: todayKey.year,
         );
       },
       periodBuilder: (BuildContext context, int offset) {

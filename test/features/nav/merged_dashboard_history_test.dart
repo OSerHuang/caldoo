@@ -282,6 +282,30 @@ void main() {
     expect(find.byKey(historyNewerKey(weekPager)), findsNothing);
   });
 
+  testWidgets(
+    'week view: the range label years follow the wall clock, not the current '
+    'week Monday',
+    (WidgetTester tester) async {
+      // Fri 2026-01-02 (12:00 +08, the fixture's UTC pinning): the current
+      // week's Monday is 2025-12-29, so judging the 概览 year rule by the
+      // MONDAY would invert it — past-year endpoints losing their year,
+      // current-year ones gaining it. The fixture week's Monday (2026-01-05)
+      // cannot catch this because its year already equals the wall clock's.
+      await env.pump(
+        tester,
+        withProfile: false,
+        now: DateTime.utc(2026, 1, 2, 4),
+      );
+      await openWeek(tester);
+
+      await swipeOlder(tester, weekPager);
+
+      // One older week: Mon 2025-12-22 .. Sun 2025-12-28, both endpoints in
+      // the wall-clock's PREVIOUS year, so both carry the year.
+      expect(_label(tester, weekPager), '2025年12月22日 - 2025年12月28日');
+    },
+  );
+
   testWidgets('week view: the ‹ / › header buttons step back and forward', (
     WidgetTester tester,
   ) async {

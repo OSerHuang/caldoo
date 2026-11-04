@@ -50,8 +50,8 @@ DateTime canonicalBirthDate(DateTime date) =>
 
 /// Whole years of age of a person born on [birthDate] on [today].
 ///
-/// Calendar arithmetic only: returns 30 for a 1995-10-22 birthday on
-/// 2026-10-22 (birthday included) and 29 on 2026-10-21. The time-of-day of
+/// Calendar arithmetic only: returns 31 for a 1995-10-22 birthday on
+/// 2026-10-22 (birthday included) and 30 on 2026-10-21. The time-of-day of
 /// either argument is irrelevant.
 int ageOnBirthday(DateTime birthDate, DateTime today) {
   var age = today.year - birthDate.year;
