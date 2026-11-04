@@ -113,9 +113,11 @@ class MealDao extends DatabaseAccessor<AppDatabase> with _$MealDaoMixin {
   }
 
   /// Distinct ids of the meals that contain an item linked to [foodId]
-  /// (`meal_items.food_id` is a back-link, not a foreign key).
+  /// (`meal_items.food_id` is a back-link, not a foreign key). A meal that
+  /// links the food on several items must come back once — the recompute flow
+  /// reports the count to the user and rewrites each listed meal.
   Future<List<String>> getMealIdsForFood(String foodId) async {
-    final query = selectOnly(mealItems)
+    final query = selectOnly(mealItems, distinct: true)
       ..addColumns([mealItems.mealId])
       ..where(mealItems.foodId.equals(foodId));
     final rows = await query.get();

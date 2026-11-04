@@ -560,4 +560,30 @@ void main() {
       expect((await db.mealDao.getMeal('m1'))!.note, isNull);
     });
   });
+
+  group('MealDao getMealIdsForFood', () {
+    test('a meal linking the food on several items comes back once', () async {
+      // The natural double-link: rice logged as two lines of one meal.
+      await db.mealDao.saveMealWithItems(
+        meal: mealCompanion(id: 'm1'),
+        items: <MealItemsCompanion>[
+          itemCompanion(id: 'i1', foodId: 'food-x'),
+          itemCompanion(id: 'i2', foodId: 'food-x'),
+        ],
+      );
+      await db.mealDao.saveMealWithItems(
+        meal: mealCompanion(id: 'm2'),
+        items: <MealItemsCompanion>[
+          itemCompanion(id: 'i3', mealId: 'm2', foodId: 'food-x'),
+        ],
+      );
+
+      final ids = await db.mealDao.getMealIdsForFood('food-x');
+
+      // One id per MEAL, not per linking item — the recompute flow reports
+      // this count to the user and rewrites each listed meal.
+      expect(ids, hasLength(2));
+      expect(ids.toSet(), <String>{'m1', 'm2'});
+    });
+  });
 }
