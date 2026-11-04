@@ -21,6 +21,7 @@ import 'package:caldoo/core/time/date_windows.dart';
 import 'package:caldoo/core/units/display_units.dart';
 import 'package:caldoo/domain/models/models.dart';
 import 'package:caldoo/features/meals/summary/meal_summary_card.dart';
+import 'package:caldoo/l10n/app_format.dart';
 import 'package:caldoo/l10n/app_strings.dart';
 
 /// Key of the meal-detail scaffold.
@@ -180,7 +181,10 @@ class MealDetailScreen extends ConsumerWidget {
                             S
                                 .of(context)
                                 .mealDetailItemLineWith(
-                                  item.grams.toStringAsFixed(0),
+                                  // The shared number format, like the review
+                                  // card and the today screen: 74.5 stays
+                                  // 74.5 instead of rounding up to 75.
+                                  AppFormat.number(item.grams),
                                   DisplayUnits.of(context)
                                       .energyText(item.kcal),
                                 ),
