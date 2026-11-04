@@ -865,6 +865,22 @@ void runMealRepositorySuite({
     expect(result[0].items.map((i) => i.id), ['i3']);
     expect(result[1].items.map((i) => i.id), ['i1', 'i2']);
   });
+
+  test('getMealsWithItemsForFood returns a doubly-linked meal ONCE', () async {
+    // One meal linking the food on two items (rice logged as two lines): the
+    // recompute flow reports the affected-meal count to the user and rewrites
+    // each listed meal, so a duplicate would double both.
+    await meals.saveMealWithItems(mealFixture(id: 'm1'), <MealItem>[
+      itemFixture(id: 'i1', foodId: 'food-x', grams: 50),
+      itemFixture(id: 'i2', foodId: 'food-x', grams: 60),
+    ]);
+
+    final result = await meals.getMealsWithItemsForFood('food-x');
+
+    expect(result, hasLength(1));
+    expect(result.single.meal.id, 'm1');
+    expect(result.single.items.map((i) => i.id), ['i1', 'i2']);
+  });
 }
 
 // ---------------------------------------------------------------------------
