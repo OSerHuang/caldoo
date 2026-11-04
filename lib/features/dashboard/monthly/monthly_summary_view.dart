@@ -250,7 +250,8 @@ class _MonthlyCard extends StatelessWidget {
   /// the 热量达标 tile only, never the chart.
   final int? goalKcal;
 
-  /// How many logged days stayed at or under [goalKcal] (0 without a goal).
+  /// How many logged days stayed within that day's budget — [goalKcal] plus
+  /// the day's exercise add-back (0 without a goal).
   final int goalAdherentDays;
 
   /// The month's body-weight entries, day-ordered (feeds the 体重 line block).

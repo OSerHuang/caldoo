@@ -96,11 +96,15 @@ final class PeriodSummary {
   /// Resolved by the energy engine from the CURRENT profile on `today`, next
   /// to the burn: a BMR-relative preset therefore reflects the current weight,
   /// and a historical period's adherence is judged against today's goal (the
-  /// same "current profile" semantics the BMR/burn already use).
+  /// same "current profile" semantics the BMR/burn already use). The adherence
+  /// comparison itself is against the day's budget — this goal plus that
+  /// day's exercise add-back — never the bare goal.
   final int? goalKcal;
 
-  /// How many logged days stayed at or under [goalKcal]. Only meaningful when
-  /// [goalKcal] is non-null; `0` otherwise.
+  /// How many logged days stayed within **that day's budget**:
+  /// [goalKcal] plus the day's own exercise add-back — exactly the daily
+  /// dashboard's 今日额度(含运动) (`EnergyBudget.budgetKcal`). Only meaningful
+  /// when [goalKcal] is non-null; `0` otherwise.
   final int goalAdherentDays;
 
   /// The period's body-weight entries, day-ordered (already bounded to the
@@ -277,11 +281,27 @@ PeriodSummaryState buildPeriodSummary({
   // [EnergyBudget.goalKcal] is the engine's own resolution: a BMR-relative
   // preset therefore follows the current weight, exactly like the budget does,
   // while a custom goal stays the fixed number the user typed.
+  //
+  // A day counts when its intake stays within THAT DAY'S budget — the goal
+  // plus the day's own exercise add-back. The comparison runs through the
+  // engine ([computeEnergyBudget] per logged day, the same call the daily
+  // dashboard makes), so the budget here can never drift from the daily page's
+  // 今日额度(含运动), and editing a day's exercise burn recomputes the tile.
+  // Balanced (intake == budget) is adherent: `!isSurplus` keeps the boundary
+  // inclusive, like the salt metric's `<=` ceiling.
   final int? goal = base.goalKcal;
   var goalAdherent = 0;
   if (goal != null) {
     for (final day in logged) {
-      if (day.intakeKcal <= goal) {
+      final EnergyBudget dayBudget = _requireBudget(
+        computeEnergyBudget(
+          profile: profile,
+          intakeKcal: day.intakeKcal,
+          exerciseKcal: day.exerciseKcal,
+          today: today,
+        ),
+      );
+      if (!dayBudget.isSurplus) {
         goalAdherent++;
       }
     }

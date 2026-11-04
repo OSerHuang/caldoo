@@ -3,7 +3,9 @@
 /// Locks the exact rules from the plan: a logged day needs `>= 1` MEAL
 /// (exercise-only days do not count), the week shows CUMULATIVE totals (never
 /// averages) over logged days only, the target line is the BMR (exercise
-/// excluded, goal ignored) and salt adherence is `adherent / logged`.
+/// excluded, goal ignored), salt adherence is `adherent / logged` and goal
+/// adherence judges each day against its OWN budget (goal + that day's
+/// exercise add-back).
 library;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -111,11 +113,42 @@ void main() {
         // Difference stays intake - (BMR + exercise): -152, NOT +743.
         expect(summary.totalBalanceKcal, -152);
         expect(summary.totalBalanceKcal, isNot(743));
-        // The goal's own metric: Tue 1500 and Thu 1800 are <= 1800; Mon
-        // 2000, Wed 2200 and Fri 2500 are not.
+        // The goal's own metric, judged against each day's budget (goal +
+        // that day's exercise): Tue 1500 and Thu 1800 are <= 1800; Wed 2200
+        // exceeds even its 1800 + 257 = 2057 budget, and Mon 2000 / Fri 2500
+        // exceed the bare 1800.
         expect(summary.goalAdherentDays, 2);
       },
     );
+
+    test('a day over the goal still counts when its exercise covers it', () {
+      // The same week with Wed's burn raised from 257 to 500: Wed's budget
+      // becomes 1800 + 500 = 2300, so its 2200 intake is within it — the tile
+      // must follow the burn edit (the bare-goal rule would still say 2).
+      final List<DayRollup> week = rollupWeek(
+        clock: weeklyClock(),
+        offset: weeklyOffset,
+        meals: weeklyMeals(),
+        exercises: <DailyExercise>[
+          DailyExercise(dayKey: weeklyDayKey(2), kcal: 500),
+          DailyExercise(dayKey: weeklyDayKey(5), kcal: 300),
+        ],
+      );
+      final WeeklySummaryState state = buildWeeklySummary(
+        week: week,
+        profile: weeklyProfile.copyWith(dailyKcalGoalOverride: 1800),
+        today: weeklyNow,
+      );
+      final WeeklySummary summary = switch (state) {
+        final WeeklySummaryReady ready => ready.summary,
+        _ => fail('expected ready, got ${state.runtimeType}'),
+      };
+      expect(summary.goalKcal, 1800);
+      // Tue 1500, Wed 2200 (<= 2300) and Thu 1800 are adherent; Mon 2000 and
+      // Fri 2500 are not — Sat's exercise-only 300 changes nothing (not a
+      // logged day).
+      expect(summary.goalAdherentDays, 3);
+    });
   });
 
   group(
@@ -155,7 +188,8 @@ void main() {
       });
 
       test('热量达标 is judged against the preset goal', () {
-        // gain: 1649 + 250 = 1899 -> Tue 1500 and Thu 1800 are adherent.
+        // gain: 1649 + 250 = 1899 -> Tue 1500 and Thu 1800 are adherent;
+        // Wed 2200 exceeds even its 1899 + 257 = 2156 day budget.
         final WeeklySummary summary = summaryOf(
           derived.copyWith(dailyGoalPreset: DailyGoalPreset.gain),
         );
