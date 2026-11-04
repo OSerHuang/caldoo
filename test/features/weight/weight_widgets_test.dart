@@ -176,6 +176,33 @@ void main() {
       expect(find.text('8月2日'), findsOneWidget);
     });
 
+    testWidgets('the entry list groups across a year boundary', (
+      WidgetTester tester,
+    ) async {
+      // Same month NUMBER in two years: each group gets its own header and
+      // the earlier year's header carries the year (the rows' rule). The
+      // discriminating text is the YEAR header — the old month-only grouping
+      // merged 2025-01 into the 2026-01 group and printed no year header at
+      // all. (The chart's x axis also emits bare 'N月' labels, so bare-month
+      // counts are not assertable here.)
+      await pumpTrend(
+        tester,
+        entries: <WeightEntry>[
+          WeightEntry(dayKey: DateTime.utc(2025, 1, 20), weightKg: 74.0),
+          WeightEntry(dayKey: DateTime.utc(2026, 1, 5), weightKg: 72.0),
+          WeightEntry(dayKey: DateTime.utc(2026, 10, 2), weightKg: 69.0),
+          WeightEntry(dayKey: DateTime.utc(2026, 10, 30), weightKg: 68.4),
+        ],
+      );
+
+      expect(
+        find.text('2025年1月'),
+        findsOneWidget,
+        reason: 'the 2025 group needs its own year-bearing header',
+      );
+      expect(find.text('1月'), findsWidgets);
+    });
+
     testWidgets('tapping a row opens the edit sheet pre-filled', (
       WidgetTester tester,
     ) async {

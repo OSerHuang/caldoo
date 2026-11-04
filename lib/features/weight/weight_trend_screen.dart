@@ -391,18 +391,25 @@ class _EntryList extends StatelessWidget {
     final ThemeData theme = Theme.of(context);
     final List<Widget> children = <Widget>[];
     // Walk newest-first; a month header precedes the first row of each group.
-    int? currentMonth;
+    // The group key is year*12+month, not the bare month number: a year
+    // boundary with the same month number (2026-01 above 2025-01) must open a
+    // new group, and the header then carries the year (2025年1月) to tell the
+    // two apart.
+    int? currentMonthIndex;
     for (int i = entries.length - 1; i >= 0; i--) {
       final WeightEntry entry = entries[i];
-      if (currentMonth != entry.dayKey.month || i == entries.length - 1) {
-        currentMonth = entry.dayKey.month;
+      final int monthIndex = entry.dayKey.year * 12 + entry.dayKey.month;
+      if (currentMonthIndex != monthIndex || i == entries.length - 1) {
+        currentMonthIndex = monthIndex;
         children.add(
           Padding(
             padding: const EdgeInsets.only(top: 8, bottom: 4),
             child: Text(
               AppFormat.month(
                 DateTime.utc(entry.dayKey.year, entry.dayKey.month),
-                currentYear: entry.dayKey.year,
+                // Same "current year" the rows use, so a header of an earlier
+                // year keeps its year instead of printing it vacuously bare.
+                currentYear: todayKey.year,
               ),
               style: theme.textTheme.titleSmall,
             ),
