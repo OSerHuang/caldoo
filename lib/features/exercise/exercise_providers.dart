@@ -31,9 +31,16 @@ import 'package:caldoo/domain/models/daily_exercise.dart';
 final exerciseClockProvider = Provider<Clock>((ref) => clock);
 
 /// The device's current UTC offset as minutes east of Greenwich.
-final exerciseOffsetProvider = Provider<LocalOffset>(
-  (ref) => LocalOffset(DateTime.now().timeZoneOffset.inMinutes),
-);
+///
+/// Re-read on every [dayTickProvider] signal, like every other offset seam:
+/// a plain `Provider` caches for the whole process lifetime, so without the
+/// watch a timezone change while the app is alive (travel, DST) kept the
+/// launch offset forever and [exerciseDayKeyProvider] re-derived its key with
+/// the stale zone.
+final exerciseOffsetProvider = Provider<LocalOffset>((ref) {
+  ref.watch(dayTickProvider);
+  return LocalOffset(DateTime.now().timeZoneOffset.inMinutes);
+});
 
 /// Today's date-only day key (`dayKeyOf(now, offset)`).
 ///
