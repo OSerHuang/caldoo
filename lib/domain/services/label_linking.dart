@@ -232,9 +232,10 @@ const List<String> _measureUnits = <String>[
 ///
 /// Only an unambiguous text is used: `两片emmental 奶酪片` → `2 × 片`, but
 /// `两个鸡蛋一碗米饭` has two quantities and yields `null` (assigning one of
-/// them to a row would be a guess). Arabic (`2片`), Chinese (`两片`) and `半`
-/// (0.5) counts are supported; a unit that is not in [_measureUnits] (e.g.
-/// `150克`) is not a portion unit and yields `null`.
+/// them to a row would be a guess). Arabic (`2片`), Chinese (`两片`), `半`
+/// (0.5) and a trailing `半` (`两片半` → 2.5) counts are supported; a unit
+/// that is not in [_measureUnits] (e.g. `150克`) is not a portion unit and
+/// yields `null`.
 LocalQuantity? parseLocalQuantity(String text) {
   final String folded = _oneLine(text);
   if (folded.isEmpty) {
@@ -248,11 +249,18 @@ LocalQuantity? parseLocalQuantity(String text) {
   if (matches.length != 1) {
     return null;
   }
-  final double? count = _parseCount(matches.single.group(1)!);
+  final RegExpMatch match = matches.single;
+  final double? count = _parseCount(match.group(1)!);
   if (count == null || !count.isFinite || count <= 0) {
     return null;
   }
-  return LocalQuantity(count: count, unit: matches.single.group(2)!);
+  // A 半 DIRECTLY after the unit completes the count: 「两片半」 = 2.5 片, not
+  // 2 片 plus a stray character. Anything further out (「半个」 after it)
+  // forms a second quantity the ambiguity rule above already refuses.
+  final double total = match.end < folded.length && folded[match.end] == '半'
+      ? count + 0.5
+      : count;
+  return LocalQuantity(count: total, unit: match.group(2)!);
 }
 
 /// The first recorded serving of [food] whose label mentions [unit]
