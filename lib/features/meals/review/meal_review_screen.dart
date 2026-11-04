@@ -54,13 +54,20 @@ import 'package:caldoo/ai/ai_client.dart' show AiError;
 import 'package:caldoo/ai/schemas/label_link.dart'
     show LabelLinkResult, LabelMatch;
 import 'package:caldoo/ai/schemas/meal_analysis.dart' show MealAnalysis;
+import 'package:caldoo/core/logging/meal_trace.dart';
 import 'package:caldoo/core/providers/app_providers.dart';
 import 'package:caldoo/core/time/date_windows.dart'
     show LocalOffset, instantFromWallClock, localDateOfKey, wallClockOf;
 import 'package:caldoo/core/units/display_units.dart';
 import 'package:caldoo/domain/models/models.dart';
 import 'package:caldoo/domain/services/label_linking.dart'
-    show LabelApplyAction, LabelApplyDecision, decideLabelApply;
+    show
+        LabelApplyAction,
+        LabelApplyDecision,
+        LocalQuantity,
+        decideLabelApply,
+        parseLocalQuantity,
+        servingGramsForQuantity;
 import 'package:caldoo/features/meals/capture/image_codec.dart'
     show PreparedPhoto;
 import 'package:caldoo/features/meals/summary/meal_summary_card.dart'
@@ -269,6 +276,14 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
   bool get _canRevise =>
       widget.photos.isNotEmpty || widget.userText.trim().isNotEmpty;
 
+  /// The one portion the capture text names (`两片`), or `null`.
+  ///
+  /// Deliberately only for a single-row draft: a meal-level quantity cannot be
+  /// assigned to one row of a multi-item meal without guessing which row it
+  /// belongs to.
+  LocalQuantity? get _localQuantity =>
+      _draft.items.length == 1 ? parseLocalQuantity(widget.userText) : null;
+
   /// Whether this capture may consult the saved-food library at all.
   ///
   /// Photo captures are prediction-only on purpose: a photo of a home-cooked
@@ -415,6 +430,14 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
         _draft.isEmpty ||
         !_canRevise ||
         !_libraryMatchingEnabled) {
+      mealTraceJson('link.skip', <String, Object?>{
+        'alreadyStarted': _linkStarted,
+        'draftEmpty': _draft.isEmpty,
+        'canRevise': _canRevise,
+        'libraryMatching': _libraryMatchingEnabled,
+        'photos': widget.photos.length,
+        'userText': widget.userText,
+      });
       return;
     }
     _linkStarted = true;
@@ -422,10 +445,12 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
     final List<Food> foods;
     try {
       foods = await ref.read(foodRepositoryProvider).getAllFoods();
-    } catch (_) {
+    } catch (error) {
+      mealTrace('link.catalog_error', error);
       return;
     }
     if (!mounted || foods.isEmpty) {
+      mealTrace('link.skip', 'mounted=$mounted foods=${foods.length}');
       return;
     }
     _linkFoods = foods;
@@ -442,8 +467,9 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
         return;
       }
       _applyLinkResult(result, snapshot, foods);
-    } on Object {
+    } on Object catch (error, stack) {
       // Never fatal: keep the AI estimate + the lexical fallback.
+      mealTrace('link.error', '$error\n$stack');
     }
   }
 
@@ -464,6 +490,14 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
       (byItem[match.itemIndex] ??= <LabelMatch>[]).add(match);
     }
     final Map<String, LinkedLabelView> views = <String, LinkedLabelView>{};
+    final LocalQuantity? localQuantity = _localQuantity;
+    if (localQuantity != null) {
+      mealTraceJson('link.local_quantity', <String, Object?>{
+        'count': localQuantity.count,
+        'unit': localQuantity.unit,
+        'userText': widget.userText,
+      });
+    }
     var applied = false;
     for (final MapEntry<int, List<LabelMatch>> entry in byItem.entries) {
       final ReviewItem? row = _rowById(snapshot[entry.key].id);
@@ -487,6 +521,23 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
       if (candidates.isEmpty) {
         continue;
       }
+      // The user's own unit wins over the model's serving guess: when the text
+      // says 「两片」, prefer the candidate that records a 「片」 serving over a
+      // top-1 that only knows 「一包 70 g」.
+      if (localQuantity != null) {
+        final int preferred = candidates.indexWhere(
+          (Food candidate) =>
+              servingGramsForQuantity(candidate, localQuantity) != null,
+        );
+        if (preferred > 0) {
+          candidates.insert(0, candidates.removeAt(preferred));
+          candidateMatches.insert(0, candidateMatches.removeAt(preferred));
+          mealTrace(
+            'link.prefer_serving',
+            '${candidates.first.name} ← ${localQuantity.unit}',
+          );
+        }
+      }
       final Food top = candidates.first;
       final LabelApplyDecision decision = decideLabelApply(
         item: snapshot[entry.key],
@@ -495,12 +546,39 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
         userEdited: row.userEdited,
         hasChosenFood: row.hasChosenFood,
         linkRejected: row.linkRejected,
+        localQuantity: localQuantity,
       );
+      mealTraceJson('link.decision', <String, Object?>{
+        'row': row.name,
+        'rowGrams': row.base.grams,
+        'rowKcal': row.base.kcal,
+        'food': top.name,
+        'foodServings': <Object?>[
+          for (final FoodServing serving in top.servings)
+            <String, Object?>{
+              'label': serving.label,
+              'amount': serving.amount,
+              'unit': serving.unit,
+            },
+        ],
+        'match': candidateMatches.first.toJson(),
+        'decision': decision.toString(),
+        'localQuantity': localQuantity?.toString(),
+        'userEdited': row.userEdited,
+        'hasChosenFood': row.hasChosenFood,
+        'linkRejected': row.linkRejected,
+      });
       if (decision.action == LabelApplyAction.autoApply &&
           !row.userEdited &&
           !row.hasChosenFood &&
           !row.linkRejected) {
         row.applyLinkedFood(top, name: top.name, grams: decision.grams);
+        mealTraceJson('link.applied', <String, Object?>{
+          'row': row.name,
+          'food': top.name,
+          'grams': row.grams,
+          'kcal': row.item.kcal,
+        });
         views[row.id] = LinkedLabelView(
           appliedFood: top,
           alternatives: candidates.skip(1).toList(growable: false),
@@ -512,6 +590,10 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
         views[row.id] = LinkedLabelView(alternatives: candidates);
       }
     }
+    mealTraceJson('link.result', <String, Object?>{
+      'matchedRows': views.length,
+      'autoApplied': applied,
+    });
     setState(() {
       _linkCompleted = true;
       _linkViews.addAll(views);
@@ -627,6 +709,13 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
       // 更换 is a re-pick of the label, so the row name follows it just like an
       // auto-apply does; the manual adopted-food block then takes over.
       item.editName(food.name);
+      final LocalQuantity? qty = _localQuantity;
+      final double? grams = qty == null
+          ? null
+          : servingGramsForQuantity(food, qty);
+      if (grams != null && !item.userEdited) {
+        item.editGrams(grams);
+      }
       _linkViews.remove(item.id);
       _dirty = true;
     });
@@ -636,6 +725,13 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
   void _applyLinkCandidate(ReviewItem item, Food food) {
     setState(() {
       item.adoptLinkedCandidate(food);
+      final LocalQuantity? qty = _localQuantity;
+      final double? grams = qty == null
+          ? null
+          : servingGramsForQuantity(food, qty);
+      if (grams != null && !item.userEdited) {
+        item.editGrams(grams);
+      }
       final LinkedLabelView? view = _linkViews[item.id];
       if (view != null) {
         _linkViews[item.id] = view.withApplied(food);
@@ -773,18 +869,28 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
         mealType: _mealType,
         timestamp: _timestamp,
       );
+      final List<MealItem> items = _draft.effectiveItems;
+      mealTraceJson('save.items', <Object?>[
+        for (final MealItem item in items)
+          <String, Object?>{
+            'name': item.name,
+            'grams': item.grams,
+            'kcal': item.kcal,
+            'foodId': item.foodId,
+            'source': item.source.name,
+            'editing': widget.editing,
+          },
+      ]);
       if (widget.editing) {
         // An edit of an already saved meal: the complete record replaces the
         // stored rows (a removed row must not survive).
-        await ref
-            .read(mealRepositoryProvider)
-            .updateMealWithItems(meal, _draft.effectiveItems);
+        await ref.read(mealRepositoryProvider).updateMealWithItems(meal, items);
       } else {
-        await ref
-            .read(mealRepositoryProvider)
-            .saveMealWithItems(meal, _draft.effectiveItems);
+        await ref.read(mealRepositoryProvider).saveMealWithItems(meal, items);
       }
-    } catch (_) {
+      mealTrace('save.ok', 'meal=${meal.id} items=${items.length}');
+    } catch (error) {
+      mealTrace('save.error', error);
       if (!mounted) {
         return;
       }
