@@ -182,6 +182,152 @@ enum LabelApplyReason {
   /// The label's per-100 g energy is far from the AI's implied value — likely
   /// a wrong match, so the user must confirm (§5.1 step 3).
   implausibleNutrients,
+
+  /// The model's [LabelMatch.servingLabel] talks about a different unit than
+  /// the one the user spelled out (`两片` vs a `一包 70 g` serving). Applying
+  /// that match would write a wildly wrong weight (2 × 70 g for two slices),
+  /// so it is only offered for an explicit choice.
+  servingUnitMismatch,
+}
+
+/// One quantity the user spelled out in the capture text, e.g. `两片` →
+/// `count: 2, unit: '片'`.
+///
+/// The analysis call never sees the saved-food library, so its `grams` is a
+/// model guess; this is the deterministic evidence that lets the review screen
+/// turn a recorded serving (`一片 25 g`) into real grams without depending on
+/// the link model returning `count`/`serving_label`.
+///
+/// Plain value type: no Flutter, no I/O (domain layer contract).
+class LocalQuantity {
+  const LocalQuantity({required this.count, required this.unit});
+
+  /// Number of servings/items the user described (`两` → 2, `半` → 0.5).
+  final double count;
+
+  /// The measure word, exactly as written (`片`, `包`, `碗`, …).
+  final String unit;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LocalQuantity && other.count == count && other.unit == unit;
+
+  @override
+  int get hashCode => Object.hash(count, unit);
+
+  @override
+  String toString() => 'LocalQuantity($count × $unit)';
+}
+
+/// The measure words a capture text may use for a portion (single-character
+/// units; a unit is matched as written, e.g. `片` inside `一片`).
+const List<String> _measureUnits = <String>[
+  '片', '包', '盒', '块', '袋', '瓶', '罐', '个', '只', '根', '条', '份', //
+  '碗', '杯', '勺', '把', '串', '粒', '颗', '枚', '张', '听', '桶', '支', //
+  '板', '排', '卷',
+];
+
+/// Parses the **single** quantity a text spells out, or `null`.
+///
+/// Only an unambiguous text is used: `两片emmental 奶酪片` → `2 × 片`, but
+/// `两个鸡蛋一碗米饭` has two quantities and yields `null` (assigning one of
+/// them to a row would be a guess). Arabic (`2片`), Chinese (`两片`) and `半`
+/// (0.5) counts are supported; a unit that is not in [_measureUnits] (e.g.
+/// `150克`) is not a portion unit and yields `null`.
+LocalQuantity? parseLocalQuantity(String text) {
+  final String folded = _oneLine(text);
+  if (folded.isEmpty) {
+    return null;
+  }
+  final RegExp pattern = RegExp(
+    r'(\d+(?:\.\d+)?|[零一二两俩三四五六七八九十半]+)\s*('
+    '${_measureUnits.join('|')})',
+  );
+  final List<RegExpMatch> matches = pattern.allMatches(folded).toList();
+  if (matches.length != 1) {
+    return null;
+  }
+  final double? count = _parseCount(matches.single.group(1)!);
+  if (count == null || !count.isFinite || count <= 0) {
+    return null;
+  }
+  return LocalQuantity(count: count, unit: matches.single.group(2)!);
+}
+
+/// The first recorded serving of [food] whose label mentions [unit]
+/// (`片` → `一片 25 g`), or `null`.
+FoodServing? servingForUnit(Food food, String unit) {
+  final String wanted = _oneLine(unit);
+  if (wanted.isEmpty) {
+    return null;
+  }
+  for (final FoodServing serving in foodServings(food)) {
+    if (!serving.amount.isFinite || serving.amount <= 0) {
+      continue;
+    }
+    if (_oneLine(serving.label).contains(wanted)) {
+      return serving;
+    }
+  }
+  return null;
+}
+
+/// `count × serving.amount` for the serving of [food] that matches
+/// [quantity]'s unit, or `null` when the food records no such serving.
+double? servingGramsForQuantity(Food food, LocalQuantity quantity) {
+  final FoodServing? serving = servingForUnit(food, quantity.unit);
+  if (serving == null) {
+    return null;
+  }
+  final double grams = quantity.count * serving.amount;
+  return grams.isFinite && grams > 0 ? grams : null;
+}
+
+double? _parseCount(String token) {
+  final String t = token.trim();
+  if (t.isEmpty) {
+    return null;
+  }
+  if (RegExp(r'^\d+(\.\d+)?$').hasMatch(t)) {
+    return double.tryParse(t);
+  }
+  if (t == '半') {
+    return 0.5;
+  }
+  if (t.contains('十')) {
+    final List<String> parts = t.split('十');
+    if (parts.length > 2) {
+      return null;
+    }
+    final double? tens = parts[0].isEmpty ? 1 : _digit(parts[0]);
+    final double? ones = parts.length == 2 && parts[1].isNotEmpty
+        ? _digit(parts[1])
+        : 0;
+    if (tens == null || ones == null) {
+      return null;
+    }
+    return tens * 10 + ones;
+  }
+  return _digit(t);
+}
+
+double? _digit(String token) {
+  const Map<String, double> values = <String, double>{
+    '零': 0,
+    '一': 1,
+    '二': 2,
+    '两': 2,
+    '俩': 2,
+    '三': 3,
+    '四': 4,
+    '五': 5,
+    '六': 6,
+    '七': 7,
+    '八': 8,
+    '九': 9,
+  };
+  return values[token];
 }
 
 /// The outcome of the auto-apply gate: an action, the reason for it, and the
@@ -240,13 +386,23 @@ class LabelApplyDecision {
 ///    `ratio = food.kcal / (item.kcal / item.grams × 100)`. A ratio outside
 ///    `[0.3, 3.3]` means the label and the AI estimate describe wildly
 ///    different foods → `suggestOnly` ([LabelApplyReason.implausibleNutrients]);
-/// 4. grams: when [LabelMatch.count] is usable **and** [LabelMatch.servingLabel]
-///    matches one of the food's recorded servings ([foodServings]: structured
-///    [Food.servings] first, [Food.notes] fallback for legacy rows), grams are
-///    `count × serving.amount`; `ml` servings use the existing 1 ml ≈ 1 g
-///    convention (the numeric amount is used as grams unchanged). Otherwise
-///    grams stay `null`, meaning "apply name + nutrients, keep the AI grams";
-/// 5. otherwise `autoApply` with [LabelApplyReason.ok].
+/// 4. when the caller also passes the quantity parsed from the capture text
+///    ([localQuantity], see [parseLocalQuantity]) the user's own words are the
+///    strongest evidence:
+///    * a model [LabelMatch.servingLabel] that talks about a different unit
+///      (`两片` vs `一包`) yields `suggestOnly` with
+///      [LabelApplyReason.servingUnitMismatch] — applying it would write
+///      `2 × 70 g` for two slices;
+///    * a recorded serving whose label mentions the user's unit (`一片 25 g`)
+///      yields `localQuantity.count × serving.amount` as grams, even when the
+///      model returned no `count`/`serving_label` at all;
+/// 5. otherwise the model pair is used: when [LabelMatch.count] is usable
+///    **and** [LabelMatch.servingLabel] matches one of the food's recorded
+///    servings ([foodServings]: structured [Food.servings] first, [Food.notes]
+///    fallback for legacy rows), grams are `count × serving.amount`; `ml`
+///    servings use the existing 1 ml ≈ 1 g convention. Otherwise grams stay
+///    `null`, meaning "apply name + nutrients, keep the AI grams";
+/// 6. otherwise `autoApply` with [LabelApplyReason.ok].
 ///
 /// The caller must still implement the undo contract (§5.3): auto-apply is
 /// allowed only because it is one tap away from being reverted.
@@ -257,6 +413,7 @@ LabelApplyDecision decideLabelApply({
   required bool userEdited,
   required bool hasChosenFood,
   required bool linkRejected,
+  LocalQuantity? localQuantity,
 }) {
   if (!food.isMatchable) {
     return const LabelApplyDecision(
@@ -295,6 +452,28 @@ LabelApplyDecision decideLabelApply({
       return const LabelApplyDecision(
         action: LabelApplyAction.suggestOnly,
         reason: LabelApplyReason.implausibleNutrients,
+      );
+    }
+  }
+
+  // The user's explicit unit (`两片`) is trusted over the model's serving
+  // guess: a mismatch must never write `2 × 一包 70 g`, and a matching recorded
+  // serving can supply grams even when the model returned no count at all.
+  if (localQuantity != null) {
+    final String? modelServingLabel = match.servingLabel;
+    if (modelServingLabel != null &&
+        !_oneLine(modelServingLabel).contains(localQuantity.unit)) {
+      return const LabelApplyDecision(
+        action: LabelApplyAction.suggestOnly,
+        reason: LabelApplyReason.servingUnitMismatch,
+      );
+    }
+    final double? localGrams = servingGramsForQuantity(food, localQuantity);
+    if (localGrams != null) {
+      return LabelApplyDecision(
+        action: LabelApplyAction.autoApply,
+        reason: LabelApplyReason.ok,
+        grams: localGrams,
       );
     }
   }
@@ -373,7 +552,7 @@ LabelMatch _cleanMatch(LabelMatch match, Food food) {
   double? cleanCount = count;
   String? servingLabel = rawServingLabel == null
       ? null
-      : _oneLine(rawServingLabel);
+      : _normalizeServingLabel(rawServingLabel);
   if (servingLabel != null && servingLabel.isEmpty) {
     servingLabel = null;
   }
@@ -396,15 +575,38 @@ LabelMatch _cleanMatch(LabelMatch match, Food food) {
   );
 }
 
-/// The serving whose label equals [foldedLabel] after whitespace folding, or
-/// `null` when the food records no such serving.
+/// The serving whose label equals [foldedLabel] after whitespace folding and
+/// amount-stripping ([_normalizeServingLabel]), or `null` when the food records
+/// no such serving.
 FoodServing? _findServing(Food food, String foldedLabel) {
+  final String wanted = _normalizeServingLabel(foldedLabel);
   for (final FoodServing serving in foodServings(food)) {
-    if (_oneLine(serving.label) == foldedLabel) {
+    if (_normalizeServingLabel(serving.label) == wanted) {
       return serving;
     }
   }
   return null;
+}
+
+/// `一片 25 g` → `一片` (also `一片（25 g）`): whitespace folded, then one
+/// trailing amount+unit token dropped.
+///
+/// The link prompt renders each serving as `label amount unit`, and the model
+/// routinely copies the whole rendered string into `serving_label` (observed
+/// live: `一片 25 g` for a recorded `一片`). A strict literal comparison would
+/// throw the count away and silently fall back to the AI grams, which is the
+/// 「两片 Emmental 奶酪片」 bug: the same serving must be recognised whether or
+/// not the model echoed its amount.
+String _normalizeServingLabel(String value) {
+  String label = _oneLine(value);
+  label = label.replaceFirst(
+    RegExp(
+      r'[\s（(]*\d+(?:\.\d+)?\s*(?:g|ml|克|毫升)\s*[）)]*$',
+      caseSensitive: false,
+    ),
+    '',
+  );
+  return label.trim();
 }
 
 /// `count × serving.amount` in grams when both the count and the serving are
@@ -419,7 +621,7 @@ double? _servingGrams(Food food, LabelMatch match) {
   if (count == null || !count.isFinite || count <= 0 || servingLabel == null) {
     return null;
   }
-  final String folded = _oneLine(servingLabel);
+  final String folded = _normalizeServingLabel(servingLabel);
   if (folded.isEmpty) {
     return null;
   }

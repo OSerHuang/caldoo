@@ -847,4 +847,191 @@ void main() {
       expect(a, isNot(c));
     });
   });
+
+  group('parseLocalQuantity', () {
+    test('parses the single Chinese/Arabic portion the user wrote', () {
+      expect(
+        parseLocalQuantity('两片emmental 奶酪片'),
+        const LocalQuantity(count: 2, unit: '片'),
+      );
+      expect(
+        parseLocalQuantity('2片奶酪'),
+        const LocalQuantity(count: 2, unit: '片'),
+      );
+      expect(
+        parseLocalQuantity('半盒牛奶'),
+        const LocalQuantity(count: 0.5, unit: '盒'),
+      );
+      expect(
+        parseLocalQuantity('十二片饼干'),
+        const LocalQuantity(count: 12, unit: '片'),
+      );
+      expect(
+        parseLocalQuantity('两份米饭'),
+        const LocalQuantity(count: 2, unit: '份'),
+      );
+    });
+
+    test('refuses ambiguous or non-portion texts', () {
+      expect(parseLocalQuantity('两个鸡蛋一碗米饭'), isNull);
+      expect(parseLocalQuantity('午饭'), isNull);
+      expect(parseLocalQuantity('约150克'), isNull);
+      expect(parseLocalQuantity(''), isNull);
+    });
+
+    test('looks the serving up by the user unit, not by amount', () {
+      final Food cheese = food(
+        'Emmental 奶酪片',
+        servings: <FoodServing>[
+          const FoodServing(label: '一片', amount: 25, unit: 'g'),
+          const FoodServing(label: '一包', amount: 70, unit: 'g'),
+        ],
+      );
+      expect(servingForUnit(cheese, '片')?.label, '一片');
+      expect(servingForUnit(cheese, '碗'), isNull);
+      expect(
+        servingGramsForQuantity(
+          cheese,
+          const LocalQuantity(count: 2, unit: '片'),
+        ),
+        50,
+      );
+      expect(
+        servingGramsForQuantity(
+          cheese,
+          const LocalQuantity(count: 1, unit: '碗'),
+        ),
+        isNull,
+      );
+    });
+  });
+
+  group('decideLabelApply · local quantity', () {
+    Food cheese() => const Food(
+      id: 'food-cheese',
+      name: 'Emmental 奶酪片',
+      servings: <FoodServing>[FoodServing(label: '一片', amount: 25, unit: 'g')],
+      source: FoodSource.label,
+      kcal: 251,
+    );
+    MealItem twoSlices() => const MealItem(
+      id: 'item-cheese',
+      name: 'Emmental 奶酪片',
+      grams: 40,
+      kcal: 100,
+      carbG: 2,
+      proteinG: 8,
+      fatG: 8,
+      saltG: 0.5,
+      source: FoodSource.ai,
+    );
+
+    test('derives grams from the user unit when the model gave no count', () {
+      final LabelApplyDecision decision = decideLabelApply(
+        item: twoSlices(),
+        food: cheese(),
+        match: const LabelMatch(itemIndex: 0, foodIndex: 0),
+        userEdited: false,
+        hasChosenFood: false,
+        linkRejected: false,
+        localQuantity: const LocalQuantity(count: 2, unit: '片'),
+      );
+      expect(decision.action, LabelApplyAction.autoApply);
+      expect(decision.reason, LabelApplyReason.ok);
+      expect(decision.grams, 50);
+    });
+
+    test('rejects a serving whose unit contradicts the user text', () {
+      final LabelApplyDecision decision = decideLabelApply(
+        item: twoSlices(),
+        food: cheese(),
+        match: const LabelMatch(
+          itemIndex: 0,
+          foodIndex: 0,
+          count: 2,
+          servingLabel: '一包',
+        ),
+        userEdited: false,
+        hasChosenFood: false,
+        linkRejected: false,
+        localQuantity: const LocalQuantity(count: 2, unit: '片'),
+      );
+      expect(decision.action, LabelApplyAction.suggestOnly);
+      expect(decision.reason, LabelApplyReason.servingUnitMismatch);
+      expect(decision.grams, isNull);
+    });
+
+    test('keeps the model path unchanged without a local quantity', () {
+      final LabelApplyDecision decision = decideLabelApply(
+        item: twoSlices(),
+        food: cheese(),
+        match: const LabelMatch(
+          itemIndex: 0,
+          foodIndex: 0,
+          count: 2,
+          servingLabel: '一片',
+        ),
+        userEdited: false,
+        hasChosenFood: false,
+        linkRejected: false,
+      );
+      expect(decision.action, LabelApplyAction.autoApply);
+      expect(decision.grams, 50);
+    });
+  });
+
+  group('serving_label echoed with its amount (live model behaviour)', () {
+    Food cheese() => const Food(
+      id: 'food-cheese',
+      name: 'Emmental 奶酪片',
+      servings: <FoodServing>[FoodServing(label: '一片', amount: 25, unit: 'g')],
+      source: FoodSource.label,
+      kcal: 251,
+    );
+    MealItem twoSlices() => const MealItem(
+      id: 'item-cheese',
+      name: 'Emmental 奶酪片',
+      grams: 40,
+      kcal: 100,
+      carbG: 2,
+      proteinG: 8,
+      fatG: 8,
+      saltG: 0.5,
+      source: FoodSource.ai,
+    );
+
+    test('strips the echoed amount and keeps the count usable', () {
+      final List<LabelMatch> normalized = normalizeLabelMatches(
+        matches: <LabelMatch>[
+          const LabelMatch(
+            itemIndex: 0,
+            foodIndex: 0,
+            count: 2,
+            servingLabel: '一片 25 g',
+          ),
+        ],
+        itemCount: 1,
+        foods: <Food>[cheese()],
+      );
+      expect(normalized.single.count, 2);
+      expect(normalized.single.servingLabel, '一片');
+    });
+
+    test('and the decision then writes 2 × 25 g', () {
+      final LabelApplyDecision decision = decideLabelApply(
+        item: twoSlices(),
+        food: cheese(),
+        match: const LabelMatch(
+          itemIndex: 0,
+          foodIndex: 0,
+          count: 2,
+          servingLabel: '一片',
+        ),
+        userEdited: false,
+        hasChosenFood: false,
+        linkRejected: false,
+      );
+      expect(decision.grams, 50);
+    });
+  });
 }

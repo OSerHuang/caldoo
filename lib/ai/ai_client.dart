@@ -25,6 +25,8 @@ import 'dart:io' show HttpDate, HttpException;
 
 import 'package:dio/dio.dart';
 
+import '../core/logging/meal_trace.dart';
+
 // verified 2026-09-22 against deepseek-flash (model list + three live calls)
 const String baseUrl = 'https://api.deepseek.com';
 
@@ -314,7 +316,49 @@ class AiClient {
     int maxTokens = 8192,
     bool retryNetworkErrors = false,
   }) async {
+    try {
+      return await _completeWithTool(
+        messages: messages,
+        toolName: toolName,
+        parameters: parameters,
+        temperature: temperature,
+        maxTokens: maxTokens,
+        retryNetworkErrors: retryNetworkErrors,
+      );
+    } on AiError catch (error) {
+      mealTrace('ai.error', '${error.runtimeType}: ${error.detail}');
+      rethrow;
+    }
+  }
+
+  Future<String> _completeWithTool({
+    required List<AiMessage> messages,
+    required String toolName,
+    required Map<String, Object?> parameters,
+    double temperature = 0,
+    int maxTokens = 8192,
+    bool retryNetworkErrors = false,
+  }) async {
     final String key = await _readApiKey();
+    mealTraceJson('ai.request', <String, Object?>{
+      'tool': toolName,
+      'model': model,
+      'temperature': temperature,
+      'maxTokens': maxTokens,
+      'retryNetworkErrors': retryNetworkErrors,
+      'paramsChars': jsonEncode(parameters).length,
+      'messages': <Object?>[
+        for (final AiMessage message in messages)
+          <String, Object?>{
+            'role': message.role,
+            'textChars': message.parts.whereType<AiTextPart>().fold<int>(
+              0,
+              (int sum, AiTextPart part) => sum + part.text.length,
+            ),
+            'images': message.parts.whereType<AiImagePart>().length,
+          },
+      ],
+    });
     final Map<String, Object?> body = <String, Object?>{
       ..._extraBody,
       'model': model,
@@ -344,9 +388,11 @@ class AiClient {
       try {
         response = await _postOnce(body, key);
       } on Timeout {
+        mealTrace('ai.retry', 'transport timeout → retry once');
         await _sleeper(_networkRetryDelay);
         response = await _postOnce(body, key);
       } on Network {
+        mealTrace('ai.retry', 'transport failure → retry once');
         await _sleeper(_networkRetryDelay);
         response = await _postOnce(body, key);
       }
@@ -354,10 +400,17 @@ class AiClient {
       response = await _postOnce(body, key);
     }
     if (_isRetryable(response.statusCode)) {
+      mealTrace('ai.retry', 'HTTP ${response.statusCode} → retry once');
       await _sleeper(_retryAfter(response) ?? Duration.zero);
       response = await _postOnce(body, key);
     }
-    return _toolArguments(response, key);
+    final String arguments = _toolArguments(response, key);
+    mealTrace(
+      'ai.response',
+      'tool=$toolName status=${response.statusCode} argsChars=${arguments.length}',
+    );
+    mealTrace('ai.tool_args', arguments);
+    return arguments;
   }
 
   /// Reads the key from the injected provider only. The value lives exactly as

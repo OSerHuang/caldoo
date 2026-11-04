@@ -27,6 +27,7 @@ import 'package:caldoo/ai/ai_client.dart';
 import 'package:caldoo/ai/prompts/label_link_prompt.dart';
 import 'package:caldoo/ai/prompts/prompt_template.dart';
 import 'package:caldoo/ai/schemas/label_link.dart';
+import 'package:caldoo/core/logging/meal_trace.dart';
 import 'package:caldoo/domain/models/models.dart';
 import 'package:caldoo/domain/services/label_linking.dart';
 import 'package:caldoo/features/settings/settings_providers.dart'
@@ -52,10 +53,12 @@ final Provider<LabelLinker> labelLinkerProvider = Provider<LabelLinker>((ref) {
     required String userText,
   }) async {
     if (items.isEmpty || foods.isEmpty) {
+      mealTrace('link.skip', 'items=${items.length} foods=${foods.length}');
       return const LabelLinkResult(matches: <LabelMatch>[]);
     }
     final String index = renderLabelIndex(foods);
     if (index.isEmpty) {
+      mealTrace('link.skip', 'rendered label index is empty');
       return const LabelLinkResult(matches: <LabelMatch>[]);
     }
     final PromptTemplate prompt = labelLinkPrompt(
@@ -65,6 +68,18 @@ final Provider<LabelLinker> labelLinkerProvider = Provider<LabelLinker>((ref) {
       ],
       userText: userText,
     );
+    mealTraceJson('link.request', <String, Object?>{
+      'userText': userText,
+      'promptId': prompt.id,
+      'promptVersion': prompt.version,
+      'items': <Object?>[
+        for (final MealItem item in items)
+          <String, Object?>{'name': item.name, 'grams': item.grams},
+      ],
+      'foods': foods.length,
+      'indexChars': index.length,
+    });
+    mealTrace('link.index', index);
     // Cold-start guard: the client must be built against the loaded saved
     // config, not the defaults, or the request would carry the user's key to
     // the default endpoint (same guard as saveAndTestConnection).
@@ -78,12 +93,17 @@ final Provider<LabelLinker> labelLinkerProvider = Provider<LabelLinker>((ref) {
           maxTokens: 2048,
         );
     final LabelLinkResult parsed = LabelLinkResult.fromToolArguments(arguments);
-    return LabelLinkResult(
-      matches: normalizeLabelMatches(
-        matches: parsed.matches,
-        itemCount: items.length,
-        foods: foods,
-      ),
+    mealTraceJson('link.matches.raw', <Object?>[
+      for (final LabelMatch match in parsed.matches) match.toJson(),
+    ]);
+    final List<LabelMatch> normalized = normalizeLabelMatches(
+      matches: parsed.matches,
+      itemCount: items.length,
+      foods: foods,
     );
+    mealTraceJson('link.matches.normalized', <Object?>[
+      for (final LabelMatch match in normalized) match.toJson(),
+    ]);
+    return LabelLinkResult(matches: normalized);
   };
 });

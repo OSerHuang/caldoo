@@ -38,6 +38,7 @@ import 'package:caldoo/ai/ai_client.dart';
 import 'package:caldoo/ai/prompts/prompts.dart';
 import 'package:caldoo/ai/schemas/meal_analysis.dart'
     show MealAnalysis, mealAnalysisToolName, mealAnalysisToolParameters;
+import 'package:caldoo/core/logging/meal_trace.dart';
 import 'package:caldoo/features/settings/settings_providers.dart'
     show aiClientProvider, aiSettingsConfigProvider;
 
@@ -219,9 +220,11 @@ class CaptureController extends Notifier<CaptureState> {
   Future<CaptureSubmission?> submit(String text) async {
     final String trimmed = text.trim();
     if (state.photos.isEmpty && trimmed.isEmpty) {
+      mealTrace('capture.skip', 'no photos and no text');
       return null;
     }
     if (state.submitting) {
+      mealTrace('capture.skip', 'a submit is already in flight');
       return null;
     }
     final List<PreparedPhoto> photos = List<PreparedPhoto>.unmodifiable(
@@ -245,6 +248,13 @@ class CaptureController extends Notifier<CaptureState> {
               userText: trimmed.isEmpty ? null : trimmed,
             )
           : mealTextPrompt(userText: trimmed);
+      mealTraceJson('capture.submit', <String, Object?>{
+        'userText': trimmed,
+        'photos': photos.length,
+        'promptId': prompt.id,
+        'promptVersion': prompt.version,
+      });
+      mealTrace('capture.prompt.user', prompt.user);
       final String arguments = await client.completeWithTool(
         messages: prompt.toMessages(
           images: <AiImagePart>[
@@ -259,12 +269,26 @@ class CaptureController extends Notifier<CaptureState> {
         retryNetworkErrors: true,
       );
       final MealAnalysis draft = MealAnalysis.fromToolArguments(arguments);
+      mealTraceJson('capture.items', <Object?>[
+        for (final item in draft.items)
+          <String, Object?>{
+            'name': item.name,
+            'grams': item.grams,
+            'kcal': item.kcal,
+            'carb_g': item.carbG,
+            'protein_g': item.proteinG,
+            'fat_g': item.fatG,
+            'salt_g': item.saltG,
+            'confidence': item.confidence,
+          },
+      ]);
       state = state.copyWith(
         outcome: CaptureOutcome.submitted,
         submitting: false,
       );
       return CaptureSubmission(draft: draft, photos: photos, userText: trimmed);
     } on AiError catch (error) {
+      mealTrace('capture.error', '${error.runtimeType}: ${error.detail}');
       state = state.copyWith(
         outcome: CaptureOutcome.failed,
         submitting: false,
