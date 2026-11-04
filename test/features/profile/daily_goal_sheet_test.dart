@@ -6,13 +6,17 @@
 // guessed back into a preset.
 //
 // dart format width=80
+import 'dart:async';
+
 import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:caldoo/core/providers/app_providers.dart'
-    show profileRepositoryProvider;
+    show exerciseRepositoryProvider, profileRepositoryProvider;
+import 'package:caldoo/core/time/day_tick_provider.dart';
+import 'package:caldoo/core/time/date_windows.dart' show dayKeyFromLocalDate;
 import 'package:caldoo/features/profile/daily_goal_sheet.dart';
 import 'package:caldoo/features/profile/profile_providers.dart';
 import 'package:caldoo/domain/models/user_profile.dart';
@@ -52,7 +56,7 @@ void main() {
           profileRepositoryProvider.overrideWithValue(repo),
           profileClockProvider.overrideWithValue(Clock.fixed(today)),
           goalSheetExerciseKcalProvider.overrideWith(
-            (Ref ref) => Future<int>.value(220),
+            (Ref ref) => Stream<int>.value(220),
           ),
         ],
         child: MaterialApp(
@@ -323,5 +327,46 @@ void main() {
     await tester.pump();
 
     expect(find.byKey(const Key('goal_validation_error')), findsOneWidget);
+  });
+
+  testWidgets('the exercise preview follows a burn logged after the first '
+      'open', (WidgetTester tester) async {
+    // The REAL provider (a live stream over the exercise port): the one-shot
+    // Future read it replaced completed once per process, so this 300 kcal
+    // entry never reached a second sheet opening (preview stuck at 0).
+    tester.view.physicalSize = const Size(900, 1500);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final FakeExerciseRepository exerciseRepo = FakeExerciseRepository();
+    final StreamController<int> ticks = StreamController<int>.broadcast();
+    addTearDown(ticks.close);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          profileRepositoryProvider.overrideWithValue(FakeProfileRepository()),
+          exerciseRepositoryProvider.overrideWithValue(exerciseRepo),
+          profileClockProvider.overrideWithValue(Clock.fixed(today)),
+          dayTickProvider.overrideWith((Ref ref) => ticks.stream),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: DailyGoalSheet(
+              profile: profile.copyWith(dailyKcalGoalOverride: 1234),
+              bmrKcal: 1649,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('目标 1234 + 运动 0 = 每日额度 1234 大卡'), findsOneWidget);
+
+    // The provider's day key is the canonical UTC-flagged date; storing under
+    // the same key keeps the fake's instant comparisons honest.
+    await exerciseRepo.setKcal(dayKey: dayKeyFromLocalDate(today), kcal: 300);
+    await tester.pumpAndSettle();
+    expect(find.text('目标 1234 + 运动 300 = 每日额度 1534 大卡'), findsOneWidget);
   });
 }
