@@ -273,14 +273,37 @@ FoodServing? servingForUnit(Food food, String unit) {
   return null;
 }
 
-/// `count × serving.amount` for the serving of [food] that matches
+/// How many units the serving's own label claims, defaulting to 1: `一片` → 1,
+/// `三块` / `3块` → 3, `半盒` → 0.5. The amount of such a label describes the
+/// WHOLE group (`三块 21 g` = three pieces weigh 21 g), so the per-unit grams
+/// are the amount divided by this count.
+double _labelUnitCount(String label) {
+  final RegExpMatch? match = RegExp(r'^(\d+(?:\.\d+)?|[零一二两俩三四五六七八九十半]+)')
+      .firstMatch(_oneLine(label));
+  if (match == null) {
+    return 1;
+  }
+  final double? count = _parseCount(match.group(1)!);
+  return (count != null && count.isFinite && count > 0) ? count : 1;
+}
+
+/// Per-unit grams of [serving]: the recorded amount over the units its own
+/// label claims (`一片 25 g` → 25, `三块 21 g` → 7, `半盒 50 g` → 100).
+double _perUnitGrams(FoodServing serving) =>
+    serving.amount / _labelUnitCount(serving.label);
+
+/// `count × per-unit grams` for the serving of [food] that matches
 /// [quantity]'s unit, or `null` when the food records no such serving.
+///
+/// The serving's own numeral is a GROUP size, never a multiplier again: the
+/// written 「三块 21 g」 means one 块 is 7 g, so 「两块」 → 14 g — not
+/// `2 × 21 = 42 g`.
 double? servingGramsForQuantity(Food food, LocalQuantity quantity) {
   final FoodServing? serving = servingForUnit(food, quantity.unit);
   if (serving == null) {
     return null;
   }
-  final double grams = quantity.count * serving.amount;
+  final double grams = quantity.count * _perUnitGrams(serving);
   return grams.isFinite && grams > 0 ? grams : null;
 }
 
@@ -629,7 +652,10 @@ double? _servingGrams(Food food, LabelMatch match) {
   if (serving == null) {
     return null;
   }
-  final double grams = count * serving.amount;
+  // Same group rule as the local-quantity path: the serving's own numeral is
+  // the units its amount covers, so the model's count multiplies the PER-UNIT
+  // grams (count 3 × 「三块 21 g」 → 21 g, not 63 g).
+  final double grams = count * _perUnitGrams(serving);
   if (!grams.isFinite || grams <= 0) {
     return null;
   }

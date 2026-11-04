@@ -906,6 +906,106 @@ void main() {
     });
   });
 
+  group('group servings (「三块 21 g」)', () {
+    // A serving label with its own numeral is a GROUP: 「三块 21 g」 means
+    // three pieces weigh 21 g, so the user's count multiplies the PER-UNIT
+    // grams — the old `count × amount` read wrote 3× too much, auto-applied.
+    final Food haw = food(
+      '山楂糕',
+      servings: <FoodServing>[
+        const FoodServing(label: '三块', amount: 21, unit: 'g'),
+      ],
+    );
+    final Food arabic = food(
+      '果丹皮',
+      servings: <FoodServing>[
+        const FoodServing(label: '3块', amount: 60, unit: 'g'),
+      ],
+    );
+    final Food halfBox = food(
+      '牛奶',
+      servings: <FoodServing>[
+        const FoodServing(label: '半盒', amount: 50, unit: 'g'),
+      ],
+    );
+
+    test('两块 × 三块 21 g → 14 g, not 42 g', () {
+      expect(
+        servingGramsForQuantity(haw, const LocalQuantity(count: 2, unit: '块')),
+        14,
+      );
+    });
+
+    test('Arabic group label: 两块 × 3块 60 g → 40 g, not 120 g', () {
+      expect(
+        servingGramsForQuantity(
+          arabic,
+          const LocalQuantity(count: 2, unit: '块'),
+        ),
+        40,
+      );
+    });
+
+    test('一盒 × 半盒 50 g → 100 g', () {
+      expect(
+        servingGramsForQuantity(
+          halfBox,
+          const LocalQuantity(count: 1, unit: '盒'),
+        ),
+        100,
+      );
+    });
+
+    test('bare-unit and 一-labels keep the old per-one semantics', () {
+      final Food cheese = food(
+        '奶酪',
+        servings: <FoodServing>[
+          const FoodServing(label: '一片', amount: 25, unit: 'g'),
+          const FoodServing(label: '片', amount: 30, unit: 'g'),
+        ],
+      );
+      expect(
+        servingGramsForQuantity(
+          cheese,
+          const LocalQuantity(count: 2, unit: '片'),
+        ),
+        50,
+      );
+    });
+
+    test(
+      'model count × group label: 3 × 三块 21 g → 21 g (decideLabelApply)',
+      () {
+        final LabelApplyDecision decision = decideLabelApply(
+          item: const MealItem(
+            id: 'item-haw',
+            name: '山楂糕',
+            grams: 40,
+            kcal: 100,
+            carbG: 2,
+            proteinG: 8,
+            fatG: 8,
+            saltG: 0.5,
+            source: FoodSource.ai,
+          ),
+          food: haw,
+          match: const LabelMatch(
+            itemIndex: 0,
+            foodIndex: 0,
+            count: 3,
+            servingLabel: '三块',
+          ),
+          userEdited: false,
+          hasChosenFood: false,
+          linkRejected: false,
+          localQuantity: null,
+        );
+        expect(decision.action, LabelApplyAction.autoApply);
+        expect(decision.grams, 21);
+      },
+    );
+  });
+
   group('decideLabelApply · local quantity', () {
     Food cheese() => const Food(
       id: 'food-cheese',
