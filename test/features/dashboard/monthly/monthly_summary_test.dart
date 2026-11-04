@@ -3,8 +3,9 @@
 /// Locks the exact rules the merged dashboard's month view shares with the
 /// week view: a logged day needs `>= 1` MEAL (exercise-only days do not count),
 /// the month shows CUMULATIVE totals (never averages) over logged days only,
-/// the target line is the BMR (exercise excluded, goal ignored) and salt adherence is
-/// `adherent / logged`.
+/// the target line is the BMR (exercise excluded, goal ignored), salt adherence
+/// is `adherent / logged` and goal adherence judges each day against its OWN
+/// budget (goal + that day's exercise add-back).
 ///
 /// The fixture is the fixed 2026-01 calendar month (31 days) mid-flight on
 /// 2026-01-20, with the same hand-computed numbers as the weekly fixture — so
@@ -136,11 +137,45 @@ void main() {
         // Difference stays intake - (BMR + exercise): -152, NOT +743.
         expect(summary.totalBalanceKcal, -152);
         expect(summary.totalBalanceKcal, isNot(743));
-        // The goal's own metric: Jan 2 (1500) and Jan 5 (1800) are <= 1800;
-        // Jan 1 (2000), Jan 3 (2200) and Jan 20 (2500) are not.
+        // The goal's own metric, judged against each day's budget (goal +
+        // that day's exercise): Jan 2 (1500) and Jan 5 (1800) are <= 1800;
+        // Jan 3 (2200) exceeds even its 1800 + 257 = 2057 day budget, and
+        // Jan 1 (2000) / Jan 20 (2500) exceed the bare 1800.
         expect(summary.goalAdherentDays, 2);
       },
     );
+
+    test('a day over the goal still counts when its exercise covers it', () {
+      // The same month with Jan 3's burn raised from 257 to 500: that day's
+      // budget becomes 1800 + 500 = 2300, so its 2200 intake is within it —
+      // the tile must follow the burn edit (the bare-goal rule would say 2).
+      final List<DayRollup> month = <DayRollup>[
+        for (final DateTime key in monthDayKeysFor(monthlyKey))
+          rollupDay(
+            date: key,
+            meals: monthlyMeals(),
+            exercises: <DailyExercise>[
+              DailyExercise(dayKey: monthlyDayKey(3), kcal: 500),
+              DailyExercise(dayKey: monthlyDayKey(10), kcal: 300),
+            ],
+            offset: monthlyOffset,
+          ),
+      ];
+      final PeriodSummaryState state = buildPeriodSummary(
+        days: month,
+        profile: monthlyProfile.copyWith(dailyKcalGoalOverride: 1800),
+        today: monthlyNow,
+      );
+      final PeriodSummary summary = switch (state) {
+        final PeriodSummaryReady ready => ready.summary,
+        _ => fail('expected ready, got ${state.runtimeType}'),
+      };
+      expect(summary.goalKcal, 1800);
+      // Jan 2 (1500), Jan 3 (2200 <= 2300) and Jan 5 (1800) are adherent;
+      // Jan 1 (2000) and Jan 20 (2500) are not — Jan 10's exercise-only 300
+      // changes nothing (not a logged day).
+      expect(summary.goalAdherentDays, 3);
+    });
   });
 
   group('salt adherence = adherent logged days / logged days', () {

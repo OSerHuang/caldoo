@@ -110,7 +110,8 @@ class PeriodTotals extends StatelessWidget {
   /// set — the 热量达标 tile renders only when a goal exists.
   final int? goalKcal;
 
-  /// How many logged days stayed at or under [goalKcal] (0 without a goal).
+  /// How many logged days stayed within that day's budget — [goalKcal] plus
+  /// the day's exercise add-back (0 without a goal).
   final int goalAdherentDays;
 
   /// Key of the goal-adherence value; required when [goalKcal] is set.
