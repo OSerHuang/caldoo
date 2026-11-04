@@ -294,6 +294,18 @@ class $UserProfilesTable extends UserProfiles
     requiredDuringInsert: false,
   );
   @override
+  late final GeneratedColumnWithTypeConverter<DailyGoalPreset?, String>
+  dailyGoalPreset =
+      GeneratedColumn<String>(
+        'daily_goal_preset',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      ).withConverter<DailyGoalPreset?>(
+        $UserProfilesTable.$converterdailyGoalPresetn,
+      );
+  @override
   List<GeneratedColumn> get $columns => [
     id,
     sex,
@@ -302,6 +314,7 @@ class $UserProfilesTable extends UserProfiles
     weightKg,
     bmrKcalOverride,
     dailyKcalGoalOverride,
+    dailyGoalPreset,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -399,6 +412,12 @@ class $UserProfilesTable extends UserProfiles
         DriftSqlType.int,
         data['${effectivePrefix}daily_kcal_goal_override'],
       ),
+      dailyGoalPreset: $UserProfilesTable.$converterdailyGoalPresetn.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}daily_goal_preset'],
+        ),
+      ),
     );
   }
 
@@ -409,6 +428,14 @@ class $UserProfilesTable extends UserProfiles
 
   static JsonTypeConverter2<Sex, String, String> $convertersex =
       const EnumNameConverter<Sex>(Sex.values);
+  static JsonTypeConverter2<DailyGoalPreset, String, String>
+  $converterdailyGoalPreset = const EnumNameConverter<DailyGoalPreset>(
+    DailyGoalPreset.values,
+  );
+  static JsonTypeConverter2<DailyGoalPreset?, String?, String?>
+  $converterdailyGoalPresetn = JsonTypeConverter2.asNullable(
+    $converterdailyGoalPreset,
+  );
 }
 
 class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
@@ -441,8 +468,20 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
   /// is set (the budget then stays "maintain": the resolved BMR).
   ///
   /// Same contract as [bmrKcalOverride]: an explicit number the user picked,
-  /// stored as INTEGER; `NULL` reads as "no goal", never as 0.
+  /// stored as INTEGER; `NULL` reads as "no goal", never as 0. This is the
+  /// **legacy absolute** goal: it stays fixed once saved and never follows the
+  /// anthropometrics (use [dailyGoalPreset] for a goal that follows the BMR).
   final int? dailyKcalGoalOverride;
+
+  /// The **relative** daily energy goal preset, or `NULL` when the goal is
+  /// either unset or an absolute [dailyKcalGoalOverride].
+  ///
+  /// Stored as the enum **name** (text), so reordering `DailyGoalPreset` can
+  /// never silently re-interpret an existing row. A preset is re-derived from
+  /// the current BMR on every read, so it follows the body weight; the legacy
+  /// absolute override above keeps its fixed custom value. At most one of the
+  /// two is non-null (the callers clear the other when writing one).
+  final DailyGoalPreset? dailyGoalPreset;
   const UserProfileRow({
     required this.id,
     required this.sex,
@@ -451,6 +490,7 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
     required this.weightKg,
     this.bmrKcalOverride,
     this.dailyKcalGoalOverride,
+    this.dailyGoalPreset,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -470,6 +510,11 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
     if (!nullToAbsent || dailyKcalGoalOverride != null) {
       map['daily_kcal_goal_override'] = Variable<int>(dailyKcalGoalOverride);
     }
+    if (!nullToAbsent || dailyGoalPreset != null) {
+      map['daily_goal_preset'] = Variable<String>(
+        $UserProfilesTable.$converterdailyGoalPresetn.toSql(dailyGoalPreset),
+      );
+    }
     return map;
   }
 
@@ -486,6 +531,9 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
       dailyKcalGoalOverride: dailyKcalGoalOverride == null && nullToAbsent
           ? const Value.absent()
           : Value(dailyKcalGoalOverride),
+      dailyGoalPreset: dailyGoalPreset == null && nullToAbsent
+          ? const Value.absent()
+          : Value(dailyGoalPreset),
     );
   }
 
@@ -506,6 +554,9 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
       dailyKcalGoalOverride: serializer.fromJson<int?>(
         json['dailyKcalGoalOverride'],
       ),
+      dailyGoalPreset: $UserProfilesTable.$converterdailyGoalPresetn.fromJson(
+        serializer.fromJson<String?>(json['dailyGoalPreset']),
+      ),
     );
   }
   @override
@@ -521,6 +572,9 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
       'weightKg': serializer.toJson<double>(weightKg),
       'bmrKcalOverride': serializer.toJson<int?>(bmrKcalOverride),
       'dailyKcalGoalOverride': serializer.toJson<int?>(dailyKcalGoalOverride),
+      'dailyGoalPreset': serializer.toJson<String?>(
+        $UserProfilesTable.$converterdailyGoalPresetn.toJson(dailyGoalPreset),
+      ),
     };
   }
 
@@ -532,6 +586,7 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
     double? weightKg,
     Value<int?> bmrKcalOverride = const Value.absent(),
     Value<int?> dailyKcalGoalOverride = const Value.absent(),
+    Value<DailyGoalPreset?> dailyGoalPreset = const Value.absent(),
   }) => UserProfileRow(
     id: id ?? this.id,
     sex: sex ?? this.sex,
@@ -544,6 +599,9 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
     dailyKcalGoalOverride: dailyKcalGoalOverride.present
         ? dailyKcalGoalOverride.value
         : this.dailyKcalGoalOverride,
+    dailyGoalPreset: dailyGoalPreset.present
+        ? dailyGoalPreset.value
+        : this.dailyGoalPreset,
   );
   UserProfileRow copyWithCompanion(UserProfilesCompanion data) {
     return UserProfileRow(
@@ -558,6 +616,9 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
       dailyKcalGoalOverride: data.dailyKcalGoalOverride.present
           ? data.dailyKcalGoalOverride.value
           : this.dailyKcalGoalOverride,
+      dailyGoalPreset: data.dailyGoalPreset.present
+          ? data.dailyGoalPreset.value
+          : this.dailyGoalPreset,
     );
   }
 
@@ -570,7 +631,8 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
           ..write('heightCm: $heightCm, ')
           ..write('weightKg: $weightKg, ')
           ..write('bmrKcalOverride: $bmrKcalOverride, ')
-          ..write('dailyKcalGoalOverride: $dailyKcalGoalOverride')
+          ..write('dailyKcalGoalOverride: $dailyKcalGoalOverride, ')
+          ..write('dailyGoalPreset: $dailyGoalPreset')
           ..write(')'))
         .toString();
   }
@@ -584,6 +646,7 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
     weightKg,
     bmrKcalOverride,
     dailyKcalGoalOverride,
+    dailyGoalPreset,
   );
   @override
   bool operator ==(Object other) =>
@@ -595,7 +658,8 @@ class UserProfileRow extends DataClass implements Insertable<UserProfileRow> {
           other.heightCm == this.heightCm &&
           other.weightKg == this.weightKg &&
           other.bmrKcalOverride == this.bmrKcalOverride &&
-          other.dailyKcalGoalOverride == this.dailyKcalGoalOverride);
+          other.dailyKcalGoalOverride == this.dailyKcalGoalOverride &&
+          other.dailyGoalPreset == this.dailyGoalPreset);
 }
 
 class UserProfilesCompanion extends UpdateCompanion<UserProfileRow> {
@@ -606,6 +670,7 @@ class UserProfilesCompanion extends UpdateCompanion<UserProfileRow> {
   final Value<double> weightKg;
   final Value<int?> bmrKcalOverride;
   final Value<int?> dailyKcalGoalOverride;
+  final Value<DailyGoalPreset?> dailyGoalPreset;
   const UserProfilesCompanion({
     this.id = const Value.absent(),
     this.sex = const Value.absent(),
@@ -614,6 +679,7 @@ class UserProfilesCompanion extends UpdateCompanion<UserProfileRow> {
     this.weightKg = const Value.absent(),
     this.bmrKcalOverride = const Value.absent(),
     this.dailyKcalGoalOverride = const Value.absent(),
+    this.dailyGoalPreset = const Value.absent(),
   });
   UserProfilesCompanion.insert({
     this.id = const Value.absent(),
@@ -623,6 +689,7 @@ class UserProfilesCompanion extends UpdateCompanion<UserProfileRow> {
     required double weightKg,
     this.bmrKcalOverride = const Value.absent(),
     this.dailyKcalGoalOverride = const Value.absent(),
+    this.dailyGoalPreset = const Value.absent(),
   }) : sex = Value(sex),
        birthDate = Value(birthDate),
        heightCm = Value(heightCm),
@@ -635,6 +702,7 @@ class UserProfilesCompanion extends UpdateCompanion<UserProfileRow> {
     Expression<double>? weightKg,
     Expression<int>? bmrKcalOverride,
     Expression<int>? dailyKcalGoalOverride,
+    Expression<String>? dailyGoalPreset,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -645,6 +713,7 @@ class UserProfilesCompanion extends UpdateCompanion<UserProfileRow> {
       if (bmrKcalOverride != null) 'bmr_kcal_override': bmrKcalOverride,
       if (dailyKcalGoalOverride != null)
         'daily_kcal_goal_override': dailyKcalGoalOverride,
+      if (dailyGoalPreset != null) 'daily_goal_preset': dailyGoalPreset,
     });
   }
 
@@ -656,6 +725,7 @@ class UserProfilesCompanion extends UpdateCompanion<UserProfileRow> {
     Value<double>? weightKg,
     Value<int?>? bmrKcalOverride,
     Value<int?>? dailyKcalGoalOverride,
+    Value<DailyGoalPreset?>? dailyGoalPreset,
   }) {
     return UserProfilesCompanion(
       id: id ?? this.id,
@@ -666,6 +736,7 @@ class UserProfilesCompanion extends UpdateCompanion<UserProfileRow> {
       bmrKcalOverride: bmrKcalOverride ?? this.bmrKcalOverride,
       dailyKcalGoalOverride:
           dailyKcalGoalOverride ?? this.dailyKcalGoalOverride,
+      dailyGoalPreset: dailyGoalPreset ?? this.dailyGoalPreset,
     );
   }
 
@@ -697,6 +768,13 @@ class UserProfilesCompanion extends UpdateCompanion<UserProfileRow> {
         dailyKcalGoalOverride.value,
       );
     }
+    if (dailyGoalPreset.present) {
+      map['daily_goal_preset'] = Variable<String>(
+        $UserProfilesTable.$converterdailyGoalPresetn.toSql(
+          dailyGoalPreset.value,
+        ),
+      );
+    }
     return map;
   }
 
@@ -709,7 +787,8 @@ class UserProfilesCompanion extends UpdateCompanion<UserProfileRow> {
           ..write('heightCm: $heightCm, ')
           ..write('weightKg: $weightKg, ')
           ..write('bmrKcalOverride: $bmrKcalOverride, ')
-          ..write('dailyKcalGoalOverride: $dailyKcalGoalOverride')
+          ..write('dailyKcalGoalOverride: $dailyKcalGoalOverride, ')
+          ..write('dailyGoalPreset: $dailyGoalPreset')
           ..write(')'))
         .toString();
   }
@@ -3438,6 +3517,7 @@ typedef $$UserProfilesTableCreateCompanionBuilder =
       required double weightKg,
       Value<int?> bmrKcalOverride,
       Value<int?> dailyKcalGoalOverride,
+      Value<DailyGoalPreset?> dailyGoalPreset,
     });
 typedef $$UserProfilesTableUpdateCompanionBuilder =
     UserProfilesCompanion Function({
@@ -3448,6 +3528,7 @@ typedef $$UserProfilesTableUpdateCompanionBuilder =
       Value<double> weightKg,
       Value<int?> bmrKcalOverride,
       Value<int?> dailyKcalGoalOverride,
+      Value<DailyGoalPreset?> dailyGoalPreset,
     });
 
 class $$UserProfilesTableFilterComposer
@@ -3494,6 +3575,12 @@ class $$UserProfilesTableFilterComposer
     column: $table.dailyKcalGoalOverride,
     builder: (column) => ColumnFilters(column),
   );
+
+  ColumnWithTypeConverterFilters<DailyGoalPreset?, DailyGoalPreset, String>
+  get dailyGoalPreset => $composableBuilder(
+    column: $table.dailyGoalPreset,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
 }
 
 class $$UserProfilesTableOrderingComposer
@@ -3539,6 +3626,11 @@ class $$UserProfilesTableOrderingComposer
     column: $table.dailyKcalGoalOverride,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get dailyGoalPreset => $composableBuilder(
+    column: $table.dailyGoalPreset,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$UserProfilesTableAnnotationComposer
@@ -3572,6 +3664,12 @@ class $$UserProfilesTableAnnotationComposer
 
   GeneratedColumn<int> get dailyKcalGoalOverride => $composableBuilder(
     column: $table.dailyKcalGoalOverride,
+    builder: (column) => column,
+  );
+
+  GeneratedColumnWithTypeConverter<DailyGoalPreset?, String>
+  get dailyGoalPreset => $composableBuilder(
+    column: $table.dailyGoalPreset,
     builder: (column) => column,
   );
 }
@@ -3614,6 +3712,7 @@ class $$UserProfilesTableTableManager
                 Value<double> weightKg = const Value.absent(),
                 Value<int?> bmrKcalOverride = const Value.absent(),
                 Value<int?> dailyKcalGoalOverride = const Value.absent(),
+                Value<DailyGoalPreset?> dailyGoalPreset = const Value.absent(),
               }) => UserProfilesCompanion(
                 id: id,
                 sex: sex,
@@ -3622,6 +3721,7 @@ class $$UserProfilesTableTableManager
                 weightKg: weightKg,
                 bmrKcalOverride: bmrKcalOverride,
                 dailyKcalGoalOverride: dailyKcalGoalOverride,
+                dailyGoalPreset: dailyGoalPreset,
               ),
           createCompanionCallback:
               ({
@@ -3632,6 +3732,7 @@ class $$UserProfilesTableTableManager
                 required double weightKg,
                 Value<int?> bmrKcalOverride = const Value.absent(),
                 Value<int?> dailyKcalGoalOverride = const Value.absent(),
+                Value<DailyGoalPreset?> dailyGoalPreset = const Value.absent(),
               }) => UserProfilesCompanion.insert(
                 id: id,
                 sex: sex,
@@ -3640,6 +3741,7 @@ class $$UserProfilesTableTableManager
                 weightKg: weightKg,
                 bmrKcalOverride: bmrKcalOverride,
                 dailyKcalGoalOverride: dailyKcalGoalOverride,
+                dailyGoalPreset: dailyGoalPreset,
               ),
           withReferenceMapper: (p0) => p0
               .map(

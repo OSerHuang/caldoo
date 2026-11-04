@@ -1,15 +1,23 @@
 /// The 每日热量目标 bottom sheet (opened from the profile screen's goal card).
 ///
-/// The goal is an EXPLICIT number: the presets only pre-compute suggestions
-/// from the resolved BMR (维持 = no goal, −250, −500, +250 kcal/day — the
-/// 1 kg ≈ 7700 kcal convention), and the user can always type their own. The
-/// stored value is whatever the preview showed when 保存 was tapped, so the
-/// engine (`computeEnergyBudget`) never re-derives it.
+/// The goal is either a **preset** or a **fixed custom number**:
+///
+/// * a preset (缓慢减脂 −250, 较快减脂 −500, 增肌增重 +250 kcal/day — the
+///   1 kg ≈ 7700 kcal convention) is RELATIVE to the resolved BMR: it is
+///   stored as [DailyGoalPreset] and re-derived by the energy engine on every
+///   read, so a body-weight change moves the goal with it;
+/// * a custom number is what the user typed: it is stored as
+///   [UserProfile.dailyKcalGoalOverride] and stays fixed, weight change or not;
+/// * 维持体重 / a blank custom field stores neither (the budget falls back to
+///   the resolved BMR).
 ///
 /// Saving writes the whole profile back through the `ProfileRepository` port
-/// with only `dailyKcalGoalOverride` changed; 恢复默认 clears the override
-/// (the budget falls back to the resolved BMR). A custom value below 1200
-/// kcal/day shows a non-blocking health hint — the app advises, never blocks.
+/// with only the goal fields changed, ALWAYS clearing the other representation
+/// (a preset and an absolute override are mutually exclusive). 恢复默认 clears
+/// both. A legacy profile (only an absolute `dailyKcalGoalOverride`) is treated
+/// as a fixed custom value — never guessed back into a preset. A final goal
+/// below 1200 kcal/day shows a non-blocking health hint; the app advises,
+/// never blocks.
 library;
 
 import 'package:flutter/material.dart';
@@ -35,17 +43,31 @@ const Key goalCustomFieldKey = Key('goal_custom_field');
 /// Key of the preview line.
 const Key goalPreviewKey = Key('goal_preview');
 
-/// The four presets, as deltas from the resolved BMR in whole kcal/day.
+/// Key of the preset-vs-custom explanation line.
+const Key goalPresetNoteKey = Key('goal_preset_note');
+
+/// The four selectable rows: three stored presets plus 维持 (no goal at all).
 enum _GoalPreset {
   maintain(null),
-  slowCut(-250),
-  fastCut(-500),
-  gain(250);
+  slowCut(DailyGoalPreset.slowCut),
+  fastCut(DailyGoalPreset.fastCut),
+  gain(DailyGoalPreset.gain);
 
-  const _GoalPreset(this.deltaKcal);
+  const _GoalPreset(this.storedPreset);
 
-  /// The BMR delta, or `null` for 维持 (clear the goal).
-  final int? deltaKcal;
+  /// The [DailyGoalPreset] persisted for this row, or `null` for 维持 (which
+  /// stores no goal at all).
+  final DailyGoalPreset? storedPreset;
+
+  /// The BMR delta in whole kcal/day, or `null` for 维持.
+  int? get deltaKcal => storedPreset?.deltaKcal;
+
+  /// The row matching a stored [DailyGoalPreset].
+  static _GoalPreset fromStored(DailyGoalPreset preset) => switch (preset) {
+    DailyGoalPreset.slowCut => slowCut,
+    DailyGoalPreset.fastCut => fastCut,
+    DailyGoalPreset.gain => gain,
+  };
 }
 
 /// Opens the goal sheet for [profile] (whose BMR must already resolve).
@@ -93,9 +115,8 @@ class _DailyGoalSheetState extends ConsumerState<DailyGoalSheet> {
   /// The goal the current selection represents: `null` = 维持 (no goal),
   /// otherwise a positive whole kcal/day value.
   ///
-  /// A selected preset wins; with no preset selected the custom field is the
-  /// goal (empty field = 维持). A stored non-preset goal is seeded verbatim
-  /// into the field on open, so the field is the single custom source.
+  /// A selected row wins (preset → `bmr + delta`, 维持 → no goal); with no row
+  /// selected the custom field is the goal (empty field = 维持).
   int? get _effectiveGoal {
     final _GoalPreset? preset = _preset;
     if (preset != null) {
@@ -108,19 +129,16 @@ class _DailyGoalSheetState extends ConsumerState<DailyGoalSheet> {
   @override
   void initState() {
     super.initState();
-    // Seed the selection from the stored goal: a preset value highlights its
-    // row, anything else lands in the custom field verbatim.
-    final int? stored = widget.profile.dailyKcalGoalOverride;
-    if (stored != null) {
-      if (stored == widget.bmrKcal - 250) {
-        _preset = _GoalPreset.slowCut;
-      } else if (stored == widget.bmrKcal - 500) {
-        _preset = _GoalPreset.fastCut;
-      } else if (stored == widget.bmrKcal + 250) {
-        _preset = _GoalPreset.gain;
-      } else {
-        _customController.text = '$stored';
-      }
+    // Seed the selection from what is stored — never infer a preset from an
+    // absolute number: a legacy value is a fixed custom goal by definition.
+    final DailyGoalPreset? storedPreset = widget.profile.dailyGoalPreset;
+    final int? storedOverride = widget.profile.dailyKcalGoalOverride;
+    if (storedPreset != null) {
+      _preset = _GoalPreset.fromStored(storedPreset);
+    } else if (storedOverride != null) {
+      _customController.text = '$storedOverride';
+    } else {
+      _preset = _GoalPreset.maintain;
     }
   }
 
@@ -148,7 +166,12 @@ class _DailyGoalSheetState extends ConsumerState<DailyGoalSheet> {
   Future<void> _restoreDefault() async {
     await ref
         .read(profileRepositoryProvider)
-        .saveProfile(widget.profile.copyWith(clearDailyKcalGoalOverride: true));
+        .saveProfile(
+          widget.profile.copyWith(
+            clearDailyKcalGoalOverride: true,
+            clearDailyGoalPreset: true,
+          ),
+        );
     if (mounted) {
       Navigator.of(context).pop();
     }
@@ -160,12 +183,35 @@ class _DailyGoalSheetState extends ConsumerState<DailyGoalSheet> {
       setState(() => _error = S.of(context).goalValidationError);
       return;
     }
-    // copyWith cannot express "set null" without the clear flag, so both are
-    // passed: a non-null effective overwrites, a null one clears.
-    final UserProfile updated = widget.profile.copyWith(
-      dailyKcalGoalOverride: effective,
-      clearDailyKcalGoalOverride: effective == null,
-    );
+    // A preset and an absolute override are mutually exclusive, so each branch
+    // clears the representation it does not write. `copyWith` cannot express
+    // "set null" without the clear flags, hence both are always passed.
+    final _GoalPreset? preset = _preset;
+    final UserProfile updated;
+    if (preset != null) {
+      final DailyGoalPreset? stored = preset.storedPreset;
+      updated = stored == null
+          // 维持体重: no goal at all.
+          ? widget.profile.copyWith(
+              clearDailyKcalGoalOverride: true,
+              clearDailyGoalPreset: true,
+            )
+          : widget.profile.copyWith(
+              dailyGoalPreset: stored,
+              clearDailyKcalGoalOverride: true,
+            );
+    } else {
+      // The custom field is the source; blank means 维持 (no goal).
+      updated = effective == null
+          ? widget.profile.copyWith(
+              clearDailyKcalGoalOverride: true,
+              clearDailyGoalPreset: true,
+            )
+          : widget.profile.copyWith(
+              dailyKcalGoalOverride: effective,
+              clearDailyGoalPreset: true,
+            );
+    }
     await ref.read(profileRepositoryProvider).saveProfile(updated);
     if (mounted) {
       Navigator.of(context).pop();
@@ -178,7 +224,6 @@ class _DailyGoalSheetState extends ConsumerState<DailyGoalSheet> {
     final int exerciseKcal =
         ref.watch(goalSheetExerciseKcalProvider).value ?? 0;
     final int? effective = _effectiveGoal;
-    final int? customValue = int.tryParse(_customController.text.trim());
 
     return Padding(
       padding: EdgeInsets.only(
@@ -208,6 +253,12 @@ class _DailyGoalSheetState extends ConsumerState<DailyGoalSheet> {
           const SizedBox(height: 2),
           Text(
             S.of(context).dailyGoalSheetCaption(widget.bmrKcal),
+            style: theme.textTheme.bodySmall,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            S.of(context).goalSheetPresetNote,
+            key: goalPresetNoteKey,
             style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: 12),
@@ -263,7 +314,9 @@ class _DailyGoalSheetState extends ConsumerState<DailyGoalSheet> {
               ),
             ],
           ),
-          if (customValue != null && customValue > 0 && customValue < 1200)
+          // The hint applies to whatever goal the current selection would
+          // actually store (preset-derived or custom), and never blocks.
+          if (effective != null && effective > 0 && effective < 1200)
             Padding(
               padding: const EdgeInsets.only(top: 6),
               child: Text(

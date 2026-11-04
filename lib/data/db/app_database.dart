@@ -98,6 +98,12 @@ class AppSettings extends Table {
 ///   `weight_entries` table (date-only `day_key` PK + `weight_kg`) stores the
 ///   one-per-day body-weight history. Both are additive, so every existing
 ///   row survives untouched and the weight history starts empty.
+/// - v12: adds the nullable `daily_goal_preset` TEXT column to `user_profile`.
+///   It is a **relative** goal re-derived from the current BMR on every read
+///   (so it follows the body weight), while the legacy absolute
+///   `daily_kcal_goal_override` keeps its fixed custom value. Pure additive
+///   nullable column: existing rows survive untouched and read `NULL` (no
+///   preset); no value is inferred from the old absolute goal.
 @DriftDatabase(
   tables: [
     AppSettings,
@@ -128,7 +134,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -328,6 +334,17 @@ class AppDatabase extends _$AppDatabase {
           schema.userProfile.dailyKcalGoalOverride,
         );
         await m.createTable(schema.weightEntries);
+      },
+      // v11 -> v12: `user_profile` gains the nullable `daily_goal_preset` TEXT
+      // column (the enum name). Additive and nullable, so every existing row
+      // survives: the old absolute `daily_kcal_goal_override` keeps its fixed
+      // custom value, and `daily_goal_preset` reads as NULL (no preset is
+      // inferred from the old goal — that migration is deliberately not done).
+      from11To12: (Migrator m, Schema12 schema) async {
+        await m.addColumn(
+          schema.userProfile,
+          schema.userProfile.dailyGoalPreset,
+        );
       },
     ),
     beforeOpen: (OpeningDetails details) async {

@@ -37,6 +37,11 @@ class UserProfileDao extends DatabaseAccessor<AppDatabase>
   /// basal metabolic rate with Mifflin-St Jeor from the anthropometrics.
   /// [dailyKcalGoalOverride] is stored verbatim too; `null` means "no goal"
   /// (the budget stays the resolved BMR).
+  ///
+  /// [dailyGoalPreset] is the **relative** goal (stored as the enum name), or
+  /// `null` when the goal is unset or an absolute [dailyKcalGoalOverride]. The
+  /// two goal fields are mutually exclusive; this method stores whatever it is
+  /// given, so callers must clear the other one when switching.
   Future<void> saveProfile({
     required Sex sex,
     required DateTime birthDate,
@@ -44,6 +49,7 @@ class UserProfileDao extends DatabaseAccessor<AppDatabase>
     required double weightKg,
     int? bmrKcalOverride,
     int? dailyKcalGoalOverride,
+    DailyGoalPreset? dailyGoalPreset,
   }) {
     return into(userProfiles).insertOnConflictUpdate(
       UserProfilesCompanion.insert(
@@ -54,6 +60,7 @@ class UserProfileDao extends DatabaseAccessor<AppDatabase>
         weightKg: weightKg,
         bmrKcalOverride: Value<int?>(bmrKcalOverride),
         dailyKcalGoalOverride: Value<int?>(dailyKcalGoalOverride),
+        dailyGoalPreset: Value<DailyGoalPreset?>(dailyGoalPreset),
       ),
     );
   }

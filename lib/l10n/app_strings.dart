@@ -1406,17 +1406,31 @@ class S {
   /// Daily-goal card subtitle: the goal equals the resolved BMR.
   String get dailyGoalSubtitleMaintain => '维持体重，与基础代谢相同';
 
-  /// Daily-goal card subtitle: goal below the resolved BMR (`diff` kcal/day).
-  String dailyGoalSubtitleCut(int diff) => '低于基础代谢 $diff 大卡/日';
+  /// Daily-goal card subtitle for a FIXED custom goal below the resolved BMR
+  /// (`diff` kcal/day): the number does not follow the weight.
+  String dailyGoalSubtitleCut(int diff) => '低于基础代谢 $diff 大卡/日（固定值，不随体重变化）';
 
-  /// Daily-goal card subtitle: goal above the resolved BMR (`diff` kcal/day).
-  String dailyGoalSubtitleGain(int diff) => '高于基础代谢 $diff 大卡/日';
+  /// Daily-goal card subtitle for a FIXED custom goal above the resolved BMR
+  /// (`diff` kcal/day): the number does not follow the weight.
+  String dailyGoalSubtitleGain(int diff) => '高于基础代谢 $diff 大卡/日（固定值，不随体重变化）';
+
+  /// Daily-goal card subtitle for a PRESET goal below the resolved BMR
+  /// (`diff` kcal/day): re-derived from the BMR, so it follows the weight.
+  String dailyGoalSubtitlePresetCut(int diff) => '低于基础代谢 $diff 大卡/日，随体重自动更新';
+
+  /// Daily-goal card subtitle for a PRESET goal above the resolved BMR
+  /// (`diff` kcal/day): re-derived from the BMR, so it follows the weight.
+  String dailyGoalSubtitlePresetGain(int diff) => '高于基础代谢 $diff 大卡/日，随体重自动更新';
 
   /// Goal sheet title.
   String get dailyGoalSheetTitle => '每日热量目标';
 
   /// Goal sheet caption (`bmr` = the resolved basal metabolic rate).
   String dailyGoalSheetCaption(int bmr) => '基础代谢 $bmr 大卡/日。不设目标时，每日额度就按基础代谢算。';
+
+  /// Goal sheet note explaining preset vs custom semantics: a preset follows
+  /// the BMR (hence the body weight), a custom number stays fixed.
+  String get goalSheetPresetNote => '档位按基础代谢计算，体重变化后每日额度会自动更新；自定义数值固定不变。';
 
   /// Preset: keep the resolved BMR (no explicit goal).
   String get goalPresetMaintain => '维持体重';

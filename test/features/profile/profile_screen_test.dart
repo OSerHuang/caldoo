@@ -59,6 +59,11 @@ Future<ProviderContainer> _pumpProfile(
     overrides: [
       profileRepositoryProvider.overrideWithValue(repo),
       profileClockProvider.overrideWithValue(Clock.fixed(_today)),
+      // The goal sheet reads today's exercise burn; a canned 0 keeps the DB
+      // unopened when a test taps the goal card.
+      goalSheetExerciseKcalProvider.overrideWith(
+        (Ref ref) => Future<int>.value(0),
+      ),
     ],
   );
   addTearDown(container.dispose);
@@ -98,6 +103,11 @@ String _fieldText(WidgetTester tester, String key) {
 }
 
 String _bmrText(WidgetTester tester) => _fieldText(tester, 'profile_bmr_field');
+
+/// The rendered value of the daily-goal card.
+String _goalValue(WidgetTester tester) => tester
+    .widget<Text>(find.byKey(const Key('profile_daily_goal_value')))
+    .data!;
 
 String _birthdayText(WidgetTester tester) {
   return tester
@@ -364,7 +374,7 @@ void main() {
     },
   );
 
-  testWidgets('saving the form preserves the stored daily goal', (
+  testWidgets('saving the form preserves a fixed custom daily goal', (
     WidgetTester tester,
   ) async {
     // Regression: _save used to rebuild the profile from the form fields
@@ -374,21 +384,85 @@ void main() {
     await repo.saveProfile(_autoProfile.copyWith(dailyKcalGoalOverride: 1399));
     await _pumpProfile(tester, repo);
 
-    // The goal card shows the stored goal (and so does the 基础额度 card —
-    // with a goal set the baseline IS the goal).
+    // The goal card shows the engine's goal (and so does the 基础额度 card —
+    // with a goal set the baseline IS the goal). The subtitle marks it fixed.
     expect(find.byKey(const Key('profile_daily_goal')), findsOneWidget);
-    expect(
-      tester
-          .widget<Text>(find.byKey(const Key('profile_daily_goal_value')))
-          .data,
-      '1399 kcal',
-    );
+    expect(_goalValue(tester), '1399 kcal');
+    expect(find.text('低于基础代谢 250 大卡/日（固定值，不随体重变化）'), findsOneWidget);
 
     // ...and a plain form save keeps it (untouched by this screen).
     await _save(tester);
 
     final UserProfile? saved = await repo.loadProfile();
     expect(saved!.dailyKcalGoalOverride, 1399);
+    expect(saved.dailyGoalPreset, isNull);
+    expect(find.text('低于基础代谢 250 大卡/日（固定值，不随体重变化）'), findsOneWidget);
+  });
+
+  testWidgets('saving the form preserves a stored preset goal', (
+    WidgetTester tester,
+  ) async {
+    // Regression: the form save carries BOTH goal representations over; a
+    // preset must not be wiped by an unrelated 资料页保存.
+    final FakeProfileRepository repo = FakeProfileRepository();
+    addTearDown(repo.dispose);
+    await repo.saveProfile(
+      _autoProfile.copyWith(dailyGoalPreset: DailyGoalPreset.gain),
+    );
+    await _pumpProfile(tester, repo);
+
+    await _save(tester);
+
+    final UserProfile? saved = await repo.loadProfile();
+    expect(saved!.dailyGoalPreset, DailyGoalPreset.gain);
+    expect(saved.dailyKcalGoalOverride, isNull);
+    expect(find.text('高于基础代谢 250 大卡/日，随体重自动更新'), findsOneWidget);
+  });
+
+  testWidgets('a preset goal follows a body-weight change automatically', (
+    WidgetTester tester,
+  ) async {
+    final FakeProfileRepository repo = FakeProfileRepository();
+    addTearDown(repo.dispose);
+    await repo.saveProfile(
+      _autoProfile.copyWith(dailyGoalPreset: DailyGoalPreset.slowCut),
+    );
+    final ProviderContainer container = await _pumpProfile(tester, repo);
+
+    // BMR 1649 - 250 = 1399.
+    expect(_goalValue(tester), '1399 kcal');
+    expect(find.text('低于基础代谢 250 大卡/日，随体重自动更新'), findsOneWidget);
+    EnergyBudget budget =
+        container.read(profileBudgetProvider)! as EnergyBudget;
+    expect(budget.bmrKcal, _maleBmr);
+    expect(budget.goalKcal, 1399);
+    expect(budget.baseBudgetKcal, 1399);
+
+    // A body-weight recording rewrites the profile weight (the same write
+    // DriftWeightRepository.saveWeight performs, preserving the preset).
+    // BMR 1649 -> 1633, so the preset goal moves 1399 -> 1383 on its own.
+    await repo.saveProfile(
+      _autoProfile.copyWith(
+        weightKg: 68.4,
+        dailyGoalPreset: DailyGoalPreset.slowCut,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(_fieldText(tester, 'profile_weight_field'), '68.4');
+    expect(_bmrText(tester), '1633');
+    expect(_goalValue(tester), '1383 kcal');
+    expect(find.text('低于基础代谢 250 大卡/日，随体重自动更新'), findsOneWidget);
+    budget = container.read(profileBudgetProvider)! as EnergyBudget;
+    expect(budget.goalKcal, 1383);
+    expect(budget.baseBudgetKcal, 1383);
+
+    // The goal sheet previews against the CURRENT (new) BMR as well.
+    await tester.tap(find.byKey(const Key('profile_daily_goal')));
+    await tester.pumpAndSettle();
+    expect(find.text('目标 1383 + 运动 0 = 每日额度 1383 大卡'), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.close));
+    await tester.pumpAndSettle();
   });
 
   testWidgets('an external weight recording live-syncs the weight cell', (

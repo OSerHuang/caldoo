@@ -25,6 +25,7 @@ import 'generated/schema_v8.dart' as v8;
 import 'generated/schema_v9.dart' as v9;
 import 'generated/schema_v10.dart' as v10;
 import 'generated/schema_v11.dart' as v11;
+import 'generated/schema_v12.dart' as v12;
 
 void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
@@ -380,10 +381,10 @@ void main() {
       });
       await oldDb.close();
 
-      // Migrate all the way to the current shape (v4 -> ... -> v11), because
+      // Migrate all the way to the current shape (v4 -> ... -> v12), because
       // the DAO below always speaks the current schema.
       final db = AppDatabase.forTesting(schema.newConnection());
-      await verifier.migrateAndValidate(db, 11);
+      await verifier.migrateAndValidate(db, 12);
 
       final migrated = await db.userProfileDao.getProfile();
       expect(migrated, isNotNull);
@@ -486,8 +487,8 @@ void main() {
 
       final db = AppDatabase.forTesting(schema.newConnection());
       // The DAO below speaks the current schema, so migrate to it (v5 -> ...
-      // -> v11): the profile DAO writes the goal column added in v11.
-      await verifier.migrateAndValidate(db, 11);
+      // -> v12): the profile DAO writes the goal preset column added in v12.
+      await verifier.migrateAndValidate(db, 12);
 
       final migrated = await db.userProfileDao.getProfile();
       expect(migrated, isNotNull);
@@ -959,7 +960,8 @@ void main() {
         await oldDb.close();
 
         final db = AppDatabase.forTesting(schema.newConnection());
-        await verifier.migrateAndValidate(db, 11);
+        // The DAO below speaks the current schema, so migrate past v11 to it.
+        await verifier.migrateAndValidate(db, 12);
 
         // The preserved row reads as "no goal", then the DAO upsert adopts one.
         final row = await db.userProfileDao.getProfile();
@@ -976,6 +978,122 @@ void main() {
           (await db.userProfileDao.getProfile())!.dailyKcalGoalOverride,
           1250,
         );
+        await db.close();
+      },
+    );
+  });
+
+  group('v11 -> v12 daily goal preset data integrity', () {
+    // v12 is purely additive: `user_profile` gains a nullable
+    // `daily_goal_preset` TEXT column (the enum name). Every existing row
+    // survives, the legacy absolute `daily_kcal_goal_override` keeps its fixed
+    // custom value, and no preset is inferred from it on migration.
+    const int birthTs = 782611200; // 1994-10-24T00:00:00Z
+
+    test(
+      'preserves the legacy goal; the new preset column reads as NULL',
+      () async {
+        await verifier.testWithDataIntegrity(
+          oldVersion: 11,
+          newVersion: 12,
+          createOld: v11.DatabaseAtV11.new,
+          createNew: v12.DatabaseAtV12.new,
+          openTestedDatabase: AppDatabase.forTesting,
+          createItems: (batch, oldDb) {
+            batch.insert(
+              oldDb.userProfile,
+              const v11.UserProfileData(
+                id: 0,
+                sex: 'male',
+                birthDate: birthTs,
+                heightCm: 175,
+                weightKg: 70,
+                bmrKcalOverride: 1649,
+                // The legacy absolute goal: a custom value that must stay
+                // fixed after the migration.
+                dailyKcalGoalOverride: 1399,
+              ),
+            );
+          },
+          validateItems: (newDb) async {
+            final profiles = await newDb.select(newDb.userProfile).get();
+            expect(profiles, hasLength(1));
+            final profile = profiles.single;
+            expect(profile.bmrKcalOverride, 1649);
+            expect(
+              profile.dailyKcalGoalOverride,
+              1399,
+              reason: 'the legacy absolute goal keeps its fixed custom value',
+            );
+            expect(
+              profile.dailyGoalPreset,
+              isNull,
+              reason: 'no preset is inferred from the old absolute goal',
+            );
+
+            // And the new column is writable next to the preserved goal: the
+            // user can switch to a preset (clearing the fixed goal) through
+            // the generated v12 shape; the next test exercises the real DAO.
+            await (newDb.update(
+              newDb.userProfile,
+            )..where((t) => t.id.equals(0))).write(
+              const v12.UserProfileCompanion(
+                dailyGoalPreset: Value<String?>('slowCut'),
+                dailyKcalGoalOverride: Value<int?>(null),
+              ),
+            );
+            final updated = await newDb.select(newDb.userProfile).getSingle();
+            expect(updated.dailyGoalPreset, 'slowCut');
+            expect(
+              updated.dailyKcalGoalOverride,
+              isNull,
+              reason: 'switching to a preset clears the fixed absolute goal',
+            );
+          },
+        );
+      },
+    );
+
+    test(
+      'a v11 profile can adopt a preset through the DAO after migrating',
+      () async {
+        final schema = await verifier.schemaAt(11);
+        final oldDb = v11.DatabaseAtV11(schema.newConnection());
+        await oldDb.batch((batch) {
+          batch.insert(
+            oldDb.userProfile,
+            const v11.UserProfileData(
+              id: 0,
+              sex: 'male',
+              birthDate: birthTs,
+              heightCm: 175,
+              weightKg: 70,
+              bmrKcalOverride: 1649,
+              dailyKcalGoalOverride: 1399,
+            ),
+          );
+        });
+        await oldDb.close();
+
+        final db = AppDatabase.forTesting(schema.newConnection());
+        await verifier.migrateAndValidate(db, 12);
+
+        // The migrated row keeps the fixed custom goal and has no preset...
+        final migrated = await db.userProfileDao.getProfile();
+        expect(migrated!.dailyKcalGoalOverride, 1399);
+        expect(migrated.dailyGoalPreset, isNull);
+
+        // ...then the DAO can store a preset (and clear the absolute goal).
+        await db.userProfileDao.saveProfile(
+          sex: Sex.male,
+          birthDate: DateTime.utc(1994, 10, 24),
+          heightCm: 175,
+          weightKg: 70,
+          dailyGoalPreset: DailyGoalPreset.fastCut,
+        );
+        final saved = await db.userProfileDao.getProfile();
+        expect(saved!.dailyGoalPreset, DailyGoalPreset.fastCut);
+        expect(saved.dailyKcalGoalOverride, isNull);
         await db.close();
       },
     );

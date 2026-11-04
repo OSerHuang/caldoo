@@ -28,6 +28,8 @@ void main() {
     double heightCm = 178,
     double weightKg = 72.5,
     int? bmrKcalOverride,
+    int? dailyKcalGoalOverride,
+    DailyGoalPreset? dailyGoalPreset,
   }) {
     return db.userProfileDao.saveProfile(
       sex: sex,
@@ -35,6 +37,8 @@ void main() {
       heightCm: heightCm,
       weightKg: weightKg,
       bmrKcalOverride: bmrKcalOverride,
+      dailyKcalGoalOverride: dailyKcalGoalOverride,
+      dailyGoalPreset: dailyGoalPreset,
     );
   }
 
@@ -107,6 +111,35 @@ void main() {
 
       expect(raw.data['bmr_kcal_override'], isNull);
       expect((await db.userProfileDao.getProfile())!.bmrKcalOverride, isNull);
+    });
+
+    test('the goal preset persists by enum name, not ordinal', () async {
+      await save(dailyGoalPreset: DailyGoalPreset.fastCut);
+
+      final raw = await db
+          .customSelect('SELECT daily_goal_preset FROM user_profile')
+          .getSingle();
+
+      expect(raw.data['daily_goal_preset'], 'fastCut');
+      expect(
+        (await db.userProfileDao.getProfile())!.dailyGoalPreset,
+        DailyGoalPreset.fastCut,
+      );
+    });
+
+    test('a null goal preset is stored as NULL next to a fixed goal', () async {
+      await save(dailyKcalGoalOverride: 1399);
+
+      final raw = await db
+          .customSelect(
+            'SELECT daily_kcal_goal_override, daily_goal_preset '
+            'FROM user_profile',
+          )
+          .getSingle();
+
+      expect(raw.data['daily_kcal_goal_override'], 1399);
+      expect(raw.data['daily_goal_preset'], isNull);
+      expect((await db.userProfileDao.getProfile())!.dailyGoalPreset, isNull);
     });
 
     test('the CHECK constraint rejects a second profile row', () async {

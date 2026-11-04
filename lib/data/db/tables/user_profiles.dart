@@ -1,6 +1,6 @@
 import 'package:drift/drift.dart';
 
-import '../../../domain/models/user_profile.dart';
+import '../../../domain/models/user_profile.dart' show DailyGoalPreset, Sex;
 
 /// The single-row user profile (`user_profile`).
 ///
@@ -44,8 +44,20 @@ class UserProfiles extends Table {
   /// is set (the budget then stays "maintain": the resolved BMR).
   ///
   /// Same contract as [bmrKcalOverride]: an explicit number the user picked,
-  /// stored as INTEGER; `NULL` reads as "no goal", never as 0.
+  /// stored as INTEGER; `NULL` reads as "no goal", never as 0. This is the
+  /// **legacy absolute** goal: it stays fixed once saved and never follows the
+  /// anthropometrics (use [dailyGoalPreset] for a goal that follows the BMR).
   IntColumn get dailyKcalGoalOverride => integer().nullable()();
+
+  /// The **relative** daily energy goal preset, or `NULL` when the goal is
+  /// either unset or an absolute [dailyKcalGoalOverride].
+  ///
+  /// Stored as the enum **name** (text), so reordering `DailyGoalPreset` can
+  /// never silently re-interpret an existing row. A preset is re-derived from
+  /// the current BMR on every read, so it follows the body weight; the legacy
+  /// absolute override above keeps its fixed custom value. At most one of the
+  /// two is non-null (the callers clear the other when writing one).
+  TextColumn get dailyGoalPreset => textEnum<DailyGoalPreset>().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};

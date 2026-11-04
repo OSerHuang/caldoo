@@ -24,6 +24,10 @@ UserProfile _$UserProfileFromJson(Map<String, dynamic> json) =>
           'dailyKcalGoalOverride',
           (v) => nullableKcalFromJson(v),
         ),
+        dailyGoalPreset: $checkedConvert(
+          'dailyGoalPreset',
+          (v) => $enumDecodeNullable(_$DailyGoalPresetEnumMap, v),
+        ),
       );
       return val;
     });
@@ -36,6 +40,13 @@ Map<String, dynamic> _$UserProfileToJson(UserProfile instance) =>
       'weightKg': instance.weightKg,
       'bmrKcalOverride': instance.bmrKcalOverride,
       'dailyKcalGoalOverride': instance.dailyKcalGoalOverride,
+      'dailyGoalPreset': _$DailyGoalPresetEnumMap[instance.dailyGoalPreset],
     };
 
 const _$SexEnumMap = {Sex.male: 'male', Sex.female: 'female'};
+
+const _$DailyGoalPresetEnumMap = {
+  DailyGoalPreset.slowCut: 'slowCut',
+  DailyGoalPreset.fastCut: 'fastCut',
+  DailyGoalPreset.gain: 'gain',
+};

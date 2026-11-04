@@ -45,12 +45,16 @@ UserProfile profileFixture({
   double heightCm = 178.5,
   double weightKg = 72.4,
   int? bmrKcalOverride = 2051,
+  int? dailyKcalGoalOverride,
+  DailyGoalPreset? dailyGoalPreset,
 }) => UserProfile(
   sex: sex,
   birthDate: birthDate ?? DateTime.utc(1994, 4, 12),
   heightCm: heightCm,
   weightKg: weightKg,
   bmrKcalOverride: bmrKcalOverride,
+  dailyKcalGoalOverride: dailyKcalGoalOverride,
+  dailyGoalPreset: dailyGoalPreset,
 );
 
 /// A saved food; nutrients default to label-style values, all overridable.
@@ -177,6 +181,46 @@ void runProfileRepositorySuite(ProfileRepository Function() create) {
     expect(loaded, isNotNull);
     expect(loaded!.bmrKcalOverride, isNull);
     expect(loaded, equals(auto));
+  });
+
+  test(
+    'a relative daily goal preset round-trips without an absolute goal',
+    () async {
+      final presetProfile = profileFixture(
+        dailyGoalPreset: DailyGoalPreset.fastCut,
+      );
+
+      await profiles.saveProfile(presetProfile);
+      final loaded = await profiles.loadProfile();
+
+      expect(loaded, isNotNull);
+      expect(loaded!.dailyGoalPreset, DailyGoalPreset.fastCut);
+      expect(loaded.dailyKcalGoalOverride, isNull);
+      expect(loaded, equals(presetProfile));
+    },
+  );
+
+  test('a legacy absolute goal round-trips with no preset', () async {
+    final fixedGoal = profileFixture(dailyKcalGoalOverride: 1399);
+
+    await profiles.saveProfile(fixedGoal);
+    final loaded = await profiles.loadProfile();
+
+    expect(loaded, isNotNull);
+    expect(loaded!.dailyKcalGoalOverride, 1399);
+    expect(loaded.dailyGoalPreset, isNull);
+    expect(loaded, equals(fixedGoal));
+  });
+
+  test('saving a profile with no goal clears a stored preset', () async {
+    await profiles.saveProfile(
+      profileFixture(dailyGoalPreset: DailyGoalPreset.slowCut),
+    );
+    await profiles.saveProfile(profileFixture());
+
+    final loaded = await profiles.loadProfile();
+    expect(loaded!.dailyGoalPreset, isNull);
+    expect(loaded.dailyKcalGoalOverride, isNull);
   });
 
   test('saving again updates the single stored profile in place', () async {

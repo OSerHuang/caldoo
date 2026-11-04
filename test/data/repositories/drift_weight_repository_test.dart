@@ -7,7 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:caldoo/data/db/app_database.dart';
 import 'package:caldoo/data/repositories/drift_weight_repository.dart';
 import 'package:caldoo/data/repositories/mappers.dart' show userProfileFromRow;
-import 'package:caldoo/domain/models/user_profile.dart' show Sex;
+import 'package:caldoo/domain/models/user_profile.dart'
+    show DailyGoalPreset, Sex;
 import 'package:caldoo/domain/models/weight_entry.dart';
 
 import '../db/_test_db.dart';
@@ -26,12 +27,17 @@ void main() {
   final DateTime day1 = DateTime.utc(2026, 10, 20);
   final DateTime day2 = DateTime.utc(2026, 10, 25);
 
-  Future<void> seedProfile() {
+  Future<void> seedProfile({
+    DailyGoalPreset? dailyGoalPreset,
+    int? dailyKcalGoalOverride,
+  }) {
     return db.userProfileDao.saveProfile(
       sex: Sex.male,
       birthDate: DateTime.utc(1996, 10, 22),
       heightCm: 175,
       weightKg: 70,
+      dailyGoalPreset: dailyGoalPreset,
+      dailyKcalGoalOverride: dailyKcalGoalOverride,
     );
   }
 
@@ -53,6 +59,38 @@ void main() {
         68.4,
         reason: 'BMR input follows the measurement',
       );
+    },
+  );
+
+  test(
+    'saveWeight preserves the profile goal (preset and legacy absolute)',
+    () async {
+      // A relative preset must survive the weight sync: it follows the BMR, so
+      // dropping it would silently reset the user's goal.
+      await seedProfile(dailyGoalPreset: DailyGoalPreset.slowCut);
+      await repo.saveWeight(dayKey: day1, weightKg: 68.4);
+
+      var profile = userProfileFromRow((await db.userProfileDao.getProfile())!);
+      expect(profile.weightKg, 68.4);
+      expect(
+        profile.dailyGoalPreset,
+        DailyGoalPreset.slowCut,
+        reason: 'the relative goal is carried over, not dropped',
+      );
+      expect(profile.dailyKcalGoalOverride, isNull);
+
+      // A legacy absolute goal keeps its fixed custom value on a weight change.
+      await seedProfile(dailyKcalGoalOverride: 1399);
+      await repo.saveWeight(dayKey: day2, weightKg: 67.9);
+
+      profile = userProfileFromRow((await db.userProfileDao.getProfile())!);
+      expect(profile.weightKg, 67.9);
+      expect(
+        profile.dailyKcalGoalOverride,
+        1399,
+        reason: 'the legacy absolute goal stays fixed',
+      );
+      expect(profile.dailyGoalPreset, isNull);
     },
   );
 
