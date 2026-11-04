@@ -11,8 +11,7 @@ void main() {
       bmrKcalOverride: 1721,
     );
 
-    test('exposes exactly sex/birthDate/heightCm/weightKg/bmrKcalOverride/'
-        'dailyKcalGoalOverride', () {
+    test('exposes exactly the profile fields', () {
       expect(profile.toJson().keys.toSet(), <String>{
         'sex',
         'birthDate',
@@ -20,6 +19,7 @@ void main() {
         'weightKg',
         'bmrKcalOverride',
         'dailyKcalGoalOverride',
+        'dailyGoalPreset',
       });
     });
 
@@ -89,6 +89,40 @@ void main() {
 
       final cleared = pinned.copyWith(clearBmrKcalOverride: true);
       expect(cleared.bmrKcalOverride, isNull);
+    });
+
+    test('the goal preset serializes as its enum name and round-trips', () {
+      final preset = profile.copyWith(dailyGoalPreset: DailyGoalPreset.fastCut);
+      expect(preset.toJson()['dailyGoalPreset'], 'fastCut');
+      expect(preset.dailyKcalGoalOverride, isNull);
+
+      final decoded = UserProfile.fromJson(preset.toJson());
+      expect(decoded, preset);
+      expect(decoded.dailyGoalPreset, DailyGoalPreset.fastCut);
+      expect(decoded.hashCode, preset.hashCode);
+    });
+
+    test('an older profile JSON without a preset decodes as no preset', () {
+      final Map<String, dynamic> legacy = profile.toJson()
+        ..remove('dailyGoalPreset');
+      final decoded = UserProfile.fromJson(legacy);
+      expect(decoded.dailyGoalPreset, isNull);
+    });
+
+    test('copyWith sets and clears the goal preset independently', () {
+      final preset = profile.copyWith(dailyGoalPreset: DailyGoalPreset.slowCut);
+      expect(preset.dailyGoalPreset, DailyGoalPreset.slowCut);
+      expect(preset.dailyKcalGoalOverride, profile.dailyKcalGoalOverride);
+      expect(preset.weightKg, profile.weightKg);
+
+      final cleared = preset.copyWith(clearDailyGoalPreset: true);
+      expect(cleared.dailyGoalPreset, isNull);
+    });
+
+    test('the two goal shapes are not equal (fixed vs relative)', () {
+      final fixed = profile.copyWith(dailyKcalGoalOverride: 1399);
+      final preset = profile.copyWith(dailyGoalPreset: DailyGoalPreset.slowCut);
+      expect(fixed, isNot(preset));
     });
   });
 

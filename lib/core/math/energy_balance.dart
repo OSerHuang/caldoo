@@ -6,21 +6,27 @@
 ///
 /// The profile stores the anthropometrics the estimate needs
 /// ([UserProfile.sex], `.birthDate`, `.heightCm`, `.weightKg`), an optional
-/// [UserProfile.bmrKcalOverride] and an optional
-/// [UserProfile.dailyKcalGoalOverride]. Age is derived from the birthday on a
-/// caller-supplied `today` ([UserProfile.ageOn]), so there is no stored age to
-/// update every year. The daily baseline is the user's goal when set and the
-/// resolved BMR otherwise; logged exercise is **added on top** of it:
+/// [UserProfile.bmrKcalOverride] and an optional daily goal. Age is derived
+/// from the birthday on a caller-supplied `today` ([UserProfile.ageOn]), so
+/// there is no stored age to update every year. The daily baseline is the
+/// user's goal when set and the resolved BMR otherwise; logged exercise is
+/// **added on top** of it:
 ///
 /// ```text
-/// baseBudget = goal ?? resolveBmrKcal(profile)   // goal wins, else BMR
-/// budget     = baseBudget + exerciseKcal         // exercise added back
+/// goal       = preset ? resolveBmrKcal(profile) + preset.deltaKcal
+///                    : dailyKcalGoalOverride            // either, never both
+/// baseBudget = goal ?? resolveBmrKcal(profile)          // goal wins, else BMR
+/// budget     = baseBudget + exerciseKcal                // exercise added back
 /// ```
 ///
-/// There is deliberately **no activity multiplier and no hidden factor**: a
-/// goal is an explicit number the user picked (the goal sheet only PRE-COMPUTES
-/// suggestions), the user sees (and can edit) the actual number, and exercise
-/// stays a separate add-back that can never be double-counted.
+/// There is deliberately **no activity multiplier and no hidden factor**: the
+/// goal is either an explicit number the user typed (a **fixed** custom goal,
+/// unaffected by later weight changes) or a [DailyGoalPreset] expressed
+/// RELATIVE to the resolved BMR. The preset is re-derived on every read, so a
+/// body-weight change flows through the anthropometrics → BMR → goal and the
+/// daily budget follows it (when the user pinned the BMR, the preset is
+/// relative to that fixed number instead). Exercise stays a separate add-back
+/// that can never be double-counted.
 ///
 /// ## Every energy number is a whole kcal integer
 ///
@@ -177,11 +183,44 @@ int resolveBmrKcal(UserProfile profile, {required DateTime today}) {
 /// Resolves the profile's daily energy goal in whole kcal/day, or `null` when
 /// no goal is set.
 ///
-/// Same contract as [resolveBmrKcal]: a non-positive goal throws an
-/// [ArgumentError] — the engine never lets a malformed number poison a day
-/// total.
-int? resolveDailyGoalKcal(UserProfile profile) {
+/// Two mutually exclusive goals exist:
+///
+/// * [UserProfile.dailyGoalPreset] — a deficit/surplus RELATIVE to [bmrKcal],
+///   so `bmrKcal + preset.deltaKcal`. Re-derived on every call, which is what
+///   makes a preset follow the body weight.
+/// * [UserProfile.dailyKcalGoalOverride] — a fixed absolute number the user
+///   typed, returned verbatim.
+///
+/// [bmrKcal] must be the resolved BMR for the same profile ([resolveBmrKcal]).
+/// A profile that carries both is malformed (the goal sheet never writes both)
+/// and throws an [ArgumentError]. A fixed override that is not positive also
+/// throws — the engine never lets a malformed number poison a day total.
+///
+/// A preset that would resolve to zero or less is NOT an error at read time:
+/// it can happen to an otherwise valid profile (a much lower BMR later, or a
+/// manually pinned BMR typed too low). There is no positive number to report,
+/// so the goal degrades to `null` — the "maintain" budget (the resolved BMR) —
+/// which keeps every read path renderable so the user can reach the goal sheet
+/// and re-pick. The profile screen labels that state explicitly.
+int? resolveDailyGoalKcal(UserProfile profile, {required int bmrKcal}) {
+  final DailyGoalPreset? preset = profile.dailyGoalPreset;
   final int? override = profile.dailyKcalGoalOverride;
+  if (preset != null && override != null) {
+    throw ArgumentError(
+      'dailyKcalGoalOverride and dailyGoalPreset are mutually exclusive: '
+      'the daily goal is either a fixed number or a BMR-relative preset',
+    );
+  }
+  if (preset != null) {
+    final int goal = bmrKcal + preset.deltaKcal;
+    if (goal <= 0) {
+      // Not expressible on this BMR (e.g. the BMR dropped, or a pinned
+      // override is too low): fall back to "maintain" rather than throwing at
+      // read time, so a page still renders and the user can re-pick the goal.
+      return null;
+    }
+    return goal;
+  }
   if (override != null && override <= 0) {
     throw ArgumentError.value(
       override,
@@ -198,9 +237,11 @@ int? resolveDailyGoalKcal(UserProfile profile) {
 /// exerciseKcal` — [exerciseKcal] is an **input** (the caller supplies the
 /// day's exercise burn); the engine never derives it and never folds it into
 /// the baseline. The goal is read from the profile
-/// ([UserProfile.dailyKcalGoalOverride]): `null` keeps the "maintain" budget
-/// (the resolved BMR). [today] is also the reference date the profile's age is
-/// derived on, so a birthday can never go stale.
+/// ([UserProfile.dailyGoalPreset] first, then
+/// [UserProfile.dailyKcalGoalOverride]): `null` keeps the "maintain" budget
+/// (the resolved BMR). A preset therefore tracks the weight, while a custom
+/// goal stays where the user put it. [today] is also the reference date the
+/// profile's age is derived on, so a birthday can never go stale.
 ///
 /// Returns [ProfileIncomplete] when [profile] is `null`. Negative
 /// [intakeKcal] / [exerciseKcal] throw an [ArgumentError] rather than poisoning
@@ -217,7 +258,7 @@ EnergyBudgetResult computeEnergyBudget({
     return const ProfileIncomplete();
   }
   final int bmr = resolveBmrKcal(profile, today: today);
-  final int? goal = resolveDailyGoalKcal(profile);
+  final int? goal = resolveDailyGoalKcal(profile, bmrKcal: bmr);
   return EnergyBudget(
     bmrKcal: bmr,
     goalKcal: goal,

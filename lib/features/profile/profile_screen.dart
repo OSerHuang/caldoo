@@ -291,11 +291,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     // This save owns EXACTLY the five form fields — sex, birthday, height,
     // weight and the BMR override. Every other profile field (the daily goal
     // above all) is carried over from the stored row verbatim, so saving the
-    // form can never wipe something this screen does not edit.
-    final int? storedGoal = ref
-        .read(storedProfileProvider)
-        .value
-        ?.dailyKcalGoalOverride;
+    // form can never wipe something this screen does not edit. The goal is
+    // carried in BOTH representations: a BMR-relative preset and a fixed
+    // custom override are mutually exclusive, and only one is non-null.
+    final UserProfile? stored = ref.read(storedProfileProvider).value;
     await ref
         .read(profileRepositoryProvider)
         .saveProfile(
@@ -305,7 +304,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             heightCm: double.parse(_heightController.text.trim()),
             weightKg: double.parse(_weightController.text.trim()),
             bmrKcalOverride: bmrOverride,
-            dailyKcalGoalOverride: storedGoal,
+            dailyKcalGoalOverride: stored?.dailyKcalGoalOverride,
+            dailyGoalPreset: stored?.dailyGoalPreset,
           ),
         );
     if (mounted) {
@@ -457,8 +457,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ),
           ),
         const SizedBox(height: 24),
-        // The daily energy goal: an explicit number the user picked (the goal
-        // sheet only pre-computes suggestions). Needs a resolvable BMR, so it
+        // The daily energy goal. Its displayed value is ALWAYS the engine's
+        // `goalKcal` (never the raw stored field): a BMR-relative preset is
+        // re-derived from the current BMR, so the card follows a weight change
+        // automatically, while a fixed custom goal stays put. The subtitle
+        // says which of the two the user has. Needs a resolvable BMR, so it
         // appears exactly when the budget card below can appear.
         Builder(
           builder: (BuildContext context) {
@@ -470,15 +473,28 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             if (resolved == null || stored == null) {
               return const SizedBox.shrink();
             }
-            final int? goal = stored.dailyKcalGoalOverride;
             final int bmr = resolved.bmrKcal;
-            final String subtitle = goal == null
-                ? S.of(context).dailyGoalSubtitleNone
-                : goal == bmr
-                ? S.of(context).dailyGoalSubtitleMaintain
-                : goal < bmr
-                ? S.of(context).dailyGoalSubtitleCut(bmr - goal)
-                : S.of(context).dailyGoalSubtitleGain(goal - bmr);
+            final int? goal = resolved.goalKcal;
+            final DailyGoalPreset? preset = stored.dailyGoalPreset;
+            final String subtitle;
+            if (goal == null) {
+              // A stored preset can stop being expressible on the current BMR
+              // (it degrades to the "maintain" budget in the engine); say so
+              // and keep the card tappable so the user can re-pick.
+              subtitle = preset != null
+                  ? S.of(context).dailyGoalSubtitlePresetUnavailable
+                  : S.of(context).dailyGoalSubtitleNone;
+            } else if (preset != null) {
+              subtitle = goal < bmr
+                  ? S.of(context).dailyGoalSubtitlePresetCut(bmr - goal)
+                  : S.of(context).dailyGoalSubtitlePresetGain(goal - bmr);
+            } else if (goal == bmr) {
+              subtitle = S.of(context).dailyGoalSubtitleMaintain;
+            } else if (goal < bmr) {
+              subtitle = S.of(context).dailyGoalSubtitleCut(bmr - goal);
+            } else {
+              subtitle = S.of(context).dailyGoalSubtitleGain(goal - bmr);
+            }
             return Card(
               key: const Key('profile_daily_goal'),
               child: ListTile(

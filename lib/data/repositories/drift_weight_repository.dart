@@ -63,7 +63,9 @@ class DriftWeightRepository implements WeightRepository {
       final UserProfileRow? profile = await _db.userProfileDao.getProfile();
       if (profile != null && profile.weightKg != weightKg) {
         // Rewrite the single row verbatim except the weight: the DAO's
-        // saveProfile is the one upsert path, so no field can be dropped.
+        // saveProfile is the one upsert path, so no field can be dropped — in
+        // particular the relative goal preset (which follows the weight) is
+        // carried over unchanged, as is the legacy absolute goal.
         await _db.userProfileDao.saveProfile(
           sex: profile.sex,
           birthDate: profile.birthDate,
@@ -71,6 +73,7 @@ class DriftWeightRepository implements WeightRepository {
           weightKg: weightKg,
           bmrKcalOverride: profile.bmrKcalOverride,
           dailyKcalGoalOverride: profile.dailyKcalGoalOverride,
+          dailyGoalPreset: profile.dailyGoalPreset,
         );
       }
     });

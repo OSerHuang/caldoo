@@ -11,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:caldoo/core/time/date_windows.dart';
 import 'package:caldoo/domain/models/daily_exercise.dart';
 import 'package:caldoo/domain/models/day_rollup.dart';
+import 'package:caldoo/domain/models/user_profile.dart';
 import 'package:caldoo/domain/models/weight_entry.dart';
 import 'package:caldoo/features/dashboard/weekly/weekly_summary.dart';
 
@@ -116,6 +117,53 @@ void main() {
       },
     );
   });
+
+  group(
+    'a preset goal follows the weight (BMR-relative, not a fixed number)',
+    () {
+      // Same person, no pinned BMR: the Mifflin-St Jeor estimate is re-derived
+      // from the current weight on every build.
+      final UserProfile derived = weeklyProfile.copyWith(
+        clearBmrKcalOverride: true,
+        dailyGoalPreset: DailyGoalPreset.slowCut,
+      );
+
+      WeeklySummary summaryOf(UserProfile profile) {
+        final WeeklySummaryState state = buildWeeklySummary(
+          week: _fixtureWeek(),
+          profile: profile,
+          today: weeklyNow,
+        );
+        return switch (state) {
+          final WeeklySummaryReady ready => ready.summary,
+          _ => fail('expected ready, got ${state.runtimeType}'),
+        };
+      }
+
+      test('70 kg: BMR 1649 -> slowCut goal 1399', () {
+        final WeeklySummary summary = summaryOf(derived);
+        expect(summary.bmrKcal, 1649);
+        expect(summary.goalKcal, 1399);
+        // The burn is still the BMR + exercise, never the goal: 5*1649 + 257.
+        expect(summary.totalBurnKcal, 8502);
+      });
+
+      test('65 kg: BMR 1599 -> the same preset now means 1349', () {
+        final WeeklySummary summary = summaryOf(derived.copyWith(weightKg: 65));
+        expect(summary.bmrKcal, 1599);
+        expect(summary.goalKcal, 1349);
+      });
+
+      test('热量达标 is judged against the preset goal', () {
+        // gain: 1649 + 250 = 1899 -> Tue 1500 and Thu 1800 are adherent.
+        final WeeklySummary summary = summaryOf(
+          derived.copyWith(dailyGoalPreset: DailyGoalPreset.gain),
+        );
+        expect(summary.goalKcal, 1899);
+        expect(summary.goalAdherentDays, 2);
+      });
+    },
+  );
 
   group('salt adherence = adherent logged days / logged days', () {
     test('4 of 5 logged days are <= 2000 mg -> 0.8', () {

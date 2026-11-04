@@ -7,12 +7,14 @@
 /// `flutter test`.
 ///
 /// The daily budget is computed ONLY by the energy engine
-/// (`computeEnergyBudget`): the exercise-free baseline is the user's daily
-/// goal ([UserProfile.dailyKcalGoalOverride]) when set, otherwise the resolved
-/// basal metabolic rate — the profile's [UserProfile.bmrKcalOverride] when set,
-/// otherwise the Mifflin-St Jeor estimate from sex/birthday/height/weight (the
-/// age is derived on the injected clock's today). There is no activity
-/// multiplier and no hidden factor.
+/// (`computeEnergyBudget`): the exercise-free baseline is the user's daily goal
+/// when one is set, otherwise the resolved basal metabolic rate — the
+/// profile's [UserProfile.bmrKcalOverride] when set, otherwise the
+/// Mifflin-St Jeor estimate from sex/birthday/height/weight (the age is derived
+/// on the injected clock's today). The goal is either a [DailyGoalPreset] (BMR
+/// + delta, re-derived on every read, so it follows the body weight) or a fixed
+/// [UserProfile.dailyKcalGoalOverride] (the number the user typed). There is no
+/// activity multiplier and no hidden factor.
 library;
 
 import 'package:clock/clock.dart';
@@ -42,7 +44,9 @@ final storedProfileProvider = StreamProvider<UserProfile?>((ref) {
 /// `computeEnergyBudget` is the ONLY place the budget is computed. The baseline
 /// it consumes is the stored daily goal when one is set, else
 /// [resolveBmrKcal]: the profile's own BMR override, or the Mifflin-St Jeor
-/// estimate when no override is stored.
+/// estimate when no override is stored. A [DailyGoalPreset] is re-derived from
+/// the current BMR (so a weight change moves the budget), while a fixed
+/// [UserProfile.dailyKcalGoalOverride] is used verbatim.
 ///
 /// Returns:
 /// * `null` while the profile stream is still loading — the UI shows a

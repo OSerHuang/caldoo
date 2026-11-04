@@ -25,9 +25,13 @@ UI is Chinese-only.)
 - **Overview**: daily / weekly / monthly energy and salt, swipe through
   history; daily exercise burn is entered manually
 - **Daily energy goal**: set it under Profile → Daily energy goal (presets or
-  a custom number); the daily budget = goal + exercise, the ring's deficit /
-  surplus is labeled relative to that budget, and the week / month summaries
-  report goal-adherent days
+  a custom number). A preset stores a delta RELATIVE to the BMR (−250 / −500 /
+  +250 kcal/day): the BMR is recomputed from your weight (and the other
+  anthropometrics) by default, so the goal and the daily budget move with your
+  weight (a manually pinned BMR is used as the fixed base instead). A custom
+  number is a fixed value that weight changes leave alone. The daily budget =
+  goal + exercise, the ring's deficit / surplus is labeled relative to that
+  budget, and the week / month summaries report goal-adherent days
 - **Weight history**: the weight card on the Overview day page (today shows the
   newest value; browsing back shows that day's own record, and none on a day
   that was not measured), the weight line block in the week / month views, and

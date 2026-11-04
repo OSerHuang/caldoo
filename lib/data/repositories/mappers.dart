@@ -24,6 +24,7 @@ UserProfile userProfileFromRow(UserProfileRow row) => UserProfile(
   weightKg: row.weightKg,
   bmrKcalOverride: row.bmrKcalOverride,
   dailyKcalGoalOverride: row.dailyKcalGoalOverride,
+  dailyGoalPreset: row.dailyGoalPreset,
 );
 
 /// Maps a saved food, preserving blank nutrients as `null` (energy is a whole

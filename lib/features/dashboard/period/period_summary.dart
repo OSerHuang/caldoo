@@ -92,6 +92,11 @@ final class PeriodSummary {
   /// The user's daily energy goal in whole kcal/day, or `null` when no goal is
   /// set (no goal-adherence is reported then). It feeds ONLY the 热量达标
   /// metric — never the burn bars, the target line or the burn totals.
+  ///
+  /// Resolved by the energy engine from the CURRENT profile on `today`, next
+  /// to the burn: a BMR-relative preset therefore reflects the current weight,
+  /// and a historical period's adherence is judged against today's goal (the
+  /// same "current profile" semantics the BMR/burn already use).
   final int? goalKcal;
 
   /// How many logged days stayed at or under [goalKcal]. Only meaningful when
@@ -263,9 +268,16 @@ PeriodSummaryState buildPeriodSummary({
     );
   }
 
+  final EnergyBudget base = _requireBudget(
+    computeEnergyBudget(profile: profile, intakeKcal: 0, today: today),
+  );
+
   // The goal-adherence count is profile-dependent (a goal IS profile state),
   // so it is computed here where the engine's inputs are already resolved.
-  final int? goal = resolveDailyGoalKcal(profile);
+  // [EnergyBudget.goalKcal] is the engine's own resolution: a BMR-relative
+  // preset therefore follows the current weight, exactly like the budget does,
+  // while a custom goal stays the fixed number the user typed.
+  final int? goal = base.goalKcal;
   var goalAdherent = 0;
   if (goal != null) {
     for (final day in logged) {
@@ -274,10 +286,6 @@ PeriodSummaryState buildPeriodSummary({
       }
     }
   }
-
-  final EnergyBudget base = _requireBudget(
-    computeEnergyBudget(profile: profile, intakeKcal: 0, today: today),
-  );
   // The period's burn is the physiological expenditure — the resolved BMR
   // plus each logged day's exercise — exactly what the chart's burn bars, the
   // dashed 基础代谢 target line and the tooltip report. The user's goal is

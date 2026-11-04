@@ -37,7 +37,7 @@ Future<void> seedEverything(AppDatabase db) async {
       heightCm: 162.5,
       weightKg: 55.25,
       bmrKcalOverride: 1311,
-      dailyKcalGoalOverride: 1200,
+      dailyGoalPreset: DailyGoalPreset.slowCut,
     ),
   );
 
@@ -192,20 +192,21 @@ void main() {
       final String payload = await sourceService.exportToJson();
       final ImportSummary summary = await targetService.importFromJson(payload);
 
-      // The export is stamped with the current (weight-history) version.
-      expect(backupSchemaVersion, 5);
-      expect(supportedBackupSchemaVersions, <int>{2, 3, 4, 5});
+      // The export is stamped with the current (goal-preset) version.
+      expect(backupSchemaVersion, 6);
+      expect(supportedBackupSchemaVersions, <int>{2, 3, 4, 5, 6});
       final Map<String, dynamic> exported =
           jsonDecode(payload) as Map<String, dynamic>;
-      expect(exported['schemaVersion'], 5);
+      expect(exported['schemaVersion'], 6);
 
-      // v5 carries the explicit daily goal next to the BMR override.
+      // v6 carries the BMR-relative goal preset next to the BMR override: the
+      // preset follows the weight, so the profile stores NO fixed number.
       final Map<String, dynamic> exportedProfile =
           exported['profile'] as Map<String, dynamic>;
       expect(exportedProfile['bmrKcalOverride'], 1311);
       expect(exportedProfile['bmrKcalOverride'], isA<int>());
-      expect(exportedProfile['dailyKcalGoalOverride'], 1200);
-      expect(exportedProfile['dailyKcalGoalOverride'], isA<int>());
+      expect(exportedProfile['dailyGoalPreset'], 'slowCut');
+      expect(exportedProfile['dailyKcalGoalOverride'], isNull);
       final Map<String, dynamic> exportedFood =
           (exported['foods'] as List<Object?>).first as Map<String, dynamic>;
       expect(exportedFood['kcal'], 251);
@@ -288,8 +289,9 @@ void main() {
       expect(actual.profile!.birthDate, DateTime.utc(1997, 3, 14));
       // The BMR override crosses the JSON round-trip verbatim (not re-derived).
       expect(actual.profile!.bmrKcalOverride, 1311);
-      // The daily goal crosses verbatim too: an explicit number, never derived.
-      expect(actual.profile!.dailyKcalGoalOverride, 1200);
+      // The goal preset crosses verbatim too (an enum name, not a number).
+      expect(actual.profile!.dailyGoalPreset, DailyGoalPreset.slowCut);
+      expect(actual.profile!.dailyKcalGoalOverride, isNull);
       expect(
         actual.dailyExercises.map((e) => e.kcal).toList(),
         unorderedEquals(<int>[220, 300]),
@@ -330,6 +332,101 @@ void main() {
         ),
         'https://api.example.test',
       );
+    });
+  });
+
+  group('legacy schemaVersion 5 profile (fixed custom goal) import', () {
+    late AppDatabase db;
+
+    setUp(() => db = testDb());
+    tearDown(() async => db.close());
+
+    /// A version-5 backup: the profile has a fixed custom goal and therefore
+    /// no `dailyGoalPreset` key at all (the field was introduced in v6).
+    String v5Payload() => jsonEncode(<String, Object?>{
+      'schemaVersion': 5,
+      'profile': <String, Object?>{
+        'sex': 'female',
+        'birthDate': DateTime.utc(1997, 3, 14).toIso8601String(),
+        'heightCm': 162.5,
+        'weightKg': 55.25,
+        'bmrKcalOverride': 1311,
+        'dailyKcalGoalOverride': 1200,
+      },
+      'foods': <Object?>[],
+      'meals': <Object?>[],
+      'dailyExercises': <Object?>[],
+      'weightEntries': <Object?>[],
+      'settings': <String, String>{},
+    });
+
+    test('a v5 fixed goal decodes as a fixed custom goal (no preset)', () {
+      final BackupData data = decodeBackup(v5Payload(), now: pinnedNow);
+      expect(data.profile, isNotNull);
+      expect(data.profile!.dailyKcalGoalOverride, 1200);
+      expect(data.profile!.dailyGoalPreset, isNull);
+    });
+
+    test('importing a v5 file keeps the fixed goal in the database', () async {
+      await BackupService(db).importFromJson(v5Payload());
+      final UserProfile? stored = await DriftProfileRepository(db)
+          .loadProfile();
+      expect(stored!.dailyKcalGoalOverride, 1200);
+      expect(stored.dailyGoalPreset, isNull);
+    });
+  });
+
+  group('v6 profile goal validation on import', () {
+    String v6Payload(Map<String, Object?> profile) =>
+        jsonEncode(<String, Object?>{
+          'schemaVersion': 6,
+          'profile': <String, Object?>{
+            'sex': 'male',
+            'birthDate': DateTime.utc(1996, 10, 22).toIso8601String(),
+            'heightCm': 175,
+            'weightKg': 70,
+            ...profile,
+          },
+          'foods': <Object?>[],
+          'meals': <Object?>[],
+          'dailyExercises': <Object?>[],
+          'weightEntries': <Object?>[],
+          'settings': <String, String>{},
+        });
+
+    test('a profile with BOTH goal representations is rejected', () {
+      final String payload = v6Payload(<String, Object?>{
+        'dailyGoalPreset': 'slowCut',
+        'dailyKcalGoalOverride': 1399,
+      });
+      expect(
+        () => decodeBackup(payload, now: pinnedNow),
+        throwsA(isA<BackupFormatException>()),
+        reason: 'the engine cannot choose between a preset and a fixed goal',
+      );
+    });
+
+    test('a preset that resolves to a non-positive goal is rejected', () {
+      // fastCut = BMR - 500; a pinned BMR of 400 makes it -100, which the
+      // engine would degrade to "maintain" — a hand-edited backup must be
+      // refused outright instead of silently losing the goal.
+      final String payload = v6Payload(<String, Object?>{
+        'bmrKcalOverride': 400,
+        'dailyGoalPreset': 'fastCut',
+      });
+      expect(
+        () => decodeBackup(payload, now: pinnedNow),
+        throwsA(isA<BackupFormatException>()),
+      );
+    });
+
+    test('a valid v6 preset still decodes', () {
+      final String payload = v6Payload(<String, Object?>{
+        'dailyGoalPreset': 'slowCut',
+      });
+      final BackupData data = decodeBackup(payload, now: pinnedNow);
+      expect(data.profile!.dailyGoalPreset, DailyGoalPreset.slowCut);
+      expect(data.profile!.dailyKcalGoalOverride, isNull);
     });
   });
 

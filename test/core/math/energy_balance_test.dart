@@ -435,17 +435,151 @@ void main() {
     );
 
     test('resolveDailyGoalKcal: null passes through, non-positive throws', () {
-      expect(resolveDailyGoalKcal(_male30), isNull);
-      expect(resolveDailyGoalKcal(goalProfile), 1250);
+      expect(resolveDailyGoalKcal(_male30, bmrKcal: 1649), isNull);
+      expect(resolveDailyGoalKcal(goalProfile, bmrKcal: 1649), 1250);
       for (final goal in <int>[0, -1]) {
         expect(
           () => resolveDailyGoalKcal(
             _male30.copyWith(dailyKcalGoalOverride: goal),
+            bmrKcal: 1649,
           ),
           throwsArgumentError,
           reason: 'goal=$goal',
         );
       }
     });
+  });
+
+  group('BMR-relative presets: the goal follows the body weight', () {
+    // The same person at 70kg (BMR 1649): the preset picks a delta from the
+    // BMR at read time, so a later weight change moves the goal with it.
+    test('slowCut = BMR - 250 (70kg -> 1399)', () {
+      final UserProfile profile = _male30.copyWith(
+        dailyGoalPreset: DailyGoalPreset.slowCut,
+      );
+      final budget = _budgetOf(
+        computeEnergyBudget(profile: profile, intakeKcal: 0, today: _today),
+      );
+      expect(budget.bmrKcal, 1649);
+      expect(budget.goalKcal, 1399);
+      expect(budget.baseBudgetKcal, 1399);
+      expect(budget.budgetKcal, 1399);
+    });
+
+    test('fastCut and gain use their own deltas', () {
+      for (final (DailyGoalPreset preset, int expectedGoal)
+          in <(DailyGoalPreset, int)>[
+            (DailyGoalPreset.fastCut, 1149),
+            (DailyGoalPreset.gain, 1899),
+          ]) {
+        final budget = _budgetOf(
+          computeEnergyBudget(
+            profile: _male30.copyWith(dailyGoalPreset: preset),
+            intakeKcal: 0,
+            today: _today,
+          ),
+        );
+        expect(budget.goalKcal, expectedGoal, reason: '$preset');
+      }
+    });
+
+    test('a lighter weight lowers the BMR and the preset goal with it', () {
+      final UserProfile lighter = _male30.copyWith(weightKg: 65);
+      // 10*65 + 6.25*175 - 5*30 + 5 == 1598.75 -> 1599.
+      final budget = _budgetOf(
+        computeEnergyBudget(
+          profile: lighter.copyWith(dailyGoalPreset: DailyGoalPreset.slowCut),
+          intakeKcal: 0,
+          today: _today,
+        ),
+      );
+      expect(budget.bmrKcal, 1599);
+      expect(
+        budget.goalKcal,
+        1349,
+        reason: 'the preset follows the weight: 1599 - 250',
+      );
+      expect(
+        budget.goalKcal,
+        1399 - 50,
+        reason: '5 kg * 10 kcal/kg lowers the goal by exactly 50 kcal',
+      );
+    });
+
+    test('the preset is relative to a pinned BMR override too', () {
+      final budget = _budgetOf(
+        computeEnergyBudget(
+          profile: _male30Manual.copyWith(
+            dailyGoalPreset: DailyGoalPreset.slowCut,
+          ),
+          intakeKcal: 0,
+          today: _today,
+        ),
+      );
+      expect(budget.bmrKcal, 1800);
+      expect(budget.goalKcal, 1550);
+    });
+
+    test('exercise still adds on top of a preset goal', () {
+      final budget = _budgetOf(
+        computeEnergyBudget(
+          profile: _male30.copyWith(dailyGoalPreset: DailyGoalPreset.fastCut),
+          intakeKcal: 1400,
+          exerciseKcal: 220,
+          today: _today,
+        ),
+      );
+      expect(budget.budgetKcal, 1369);
+      expect(budget.deficitKcal, -31);
+    });
+
+    test('a preset and a fixed override are mutually exclusive', () {
+      final UserProfile malformed = _male30.copyWith(
+        dailyGoalPreset: DailyGoalPreset.slowCut,
+        dailyKcalGoalOverride: 1250,
+      );
+      expect(
+        () => resolveDailyGoalKcal(malformed, bmrKcal: 1649),
+        throwsArgumentError,
+      );
+      expect(
+        () => computeEnergyBudget(
+          profile: malformed,
+          intakeKcal: 0,
+          today: _today,
+        ),
+        throwsArgumentError,
+        reason: 'the engine refuses to guess which goal wins',
+      );
+    });
+
+    test(
+      'a preset that resolves to a non-positive goal degrades to no goal',
+      () {
+        // A profile can become unable to express its preset (the BMR dropped,
+        // or a pinned override is too low). Read paths must stay renderable,
+        // so the engine falls back to the maintain budget instead of throwing.
+        final UserProfile profile = _male30.copyWith(
+          dailyGoalPreset: DailyGoalPreset.fastCut,
+        );
+        for (final int bmr in <int>[500, 400]) {
+          expect(
+            resolveDailyGoalKcal(profile, bmrKcal: bmr),
+            isNull,
+            reason: 'bmr=$bmr',
+          );
+        }
+        final budget = _budgetOf(
+          computeEnergyBudget(
+            profile: profile.copyWith(bmrKcalOverride: 400),
+            intakeKcal: 0,
+            today: _today,
+          ),
+        );
+        expect(budget.goalKcal, isNull);
+        expect(budget.baseBudgetKcal, 400);
+        expect(budget.budgetKcal, 400);
+      },
+    );
   });
 }

@@ -43,11 +43,18 @@ import 'package:caldoo/domain/models/weight_entry.dart';
 ///   history) and the profile's `dailyKcalGoalOverride` field. Versions 2–4
 ///   remain importable: a missing section decodes as empty and a missing
 ///   profile field decodes as `null` (no goal).
-const int backupSchemaVersion = 5;
+/// * 6 — the profile's daily goal may now be a BMR-relative preset
+///   (`dailyGoalPreset`: slowCut / fastCut / gain) that follows the body
+///   weight, next to the fixed `dailyKcalGoalOverride`. Bumped rather than
+///   slipped into version 5: an older build would import a version-5 file
+///   happily and silently DROP the preset (the budget would fall back to the
+///   BMR), so the version stamp makes the incompatibility explicit. Versions
+///   2–5 remain importable — their profile simply has no preset.
+const int backupSchemaVersion = 6;
 
 /// Versions [decodeBackup] can still read (the current one plus the legacy
 /// age-based profile shapes). Anything else is rejected outright.
-const Set<int> supportedBackupSchemaVersions = <int>{2, 3, 4, 5};
+const Set<int> supportedBackupSchemaVersions = <int>{2, 3, 4, 5, 6};
 
 /// `app_settings` keys that are transient UI state or device preferences, not
 /// user data.
