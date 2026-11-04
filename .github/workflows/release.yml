@@ -19,9 +19,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"
@@ -81,14 +81,14 @@ jobs:
       - name: Rename APK
         run: cp build/app/outputs/flutter-apk/app-release.apk "caldoo-${GITHUB_REF_NAME}.apk"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: caldoo-${{ github.ref_name }}
           path: caldoo-*.apk
           retention-days: 14
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: caldoo-*.apk
           generate_release_notes: true
