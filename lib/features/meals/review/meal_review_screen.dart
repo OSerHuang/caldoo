@@ -706,14 +706,18 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
     }
     setState(() {
       item.chooseFood(food);
-      // 更换 is a re-pick of the label, so the row name follows it just like an
-      // auto-apply does; the manual adopted-food block then takes over.
-      item.editName(food.name);
       final LocalQuantity? qty = _localQuantity;
       final double? grams = qty == null
           ? null
           : servingGramsForQuantity(food, qty);
-      if (grams != null && !item.userEdited) {
+      // 更换 is a re-pick of the label, so the row name follows it just like an
+      // auto-apply does; the manual adopted-food block then takes over. The
+      // grams guard is read BEFORE editName: editName marks the row
+      // user-edited, so testing item.userEdited afterwards made the
+      // serving-grams apply dead code — 更换 never wrote the serving grams.
+      final bool wasEdited = item.userEdited;
+      item.editName(food.name);
+      if (grams != null && !wasEdited) {
         item.editGrams(grams);
       }
       _linkViews.remove(item.id);
