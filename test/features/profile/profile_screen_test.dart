@@ -63,7 +63,7 @@ Future<ProviderContainer> _pumpProfile(
       // The goal sheet reads today's exercise burn; a canned 0 keeps the DB
       // unopened when a test taps the goal card.
       goalSheetExerciseKcalProvider.overrideWith(
-        (Ref ref) => Future<int>.value(0),
+        (Ref ref) => Stream<int>.value(0),
       ),
     ],
   );

@@ -22,6 +22,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:caldoo/core/math/energy_balance.dart';
 import 'package:caldoo/core/providers/app_providers.dart';
+import 'package:caldoo/core/time/day_tick_provider.dart';
 import 'package:caldoo/core/time/date_windows.dart';
 import 'package:caldoo/domain/models/daily_exercise.dart';
 import 'package:caldoo/domain/models/user_profile.dart';
@@ -68,21 +69,27 @@ final profileBudgetProvider = Provider<EnergyBudgetResult?>((ref) {
 
 /// Today's logged exercise burn, for the goal sheet's preview equation.
 ///
-/// A one-shot read over the exercise port for today's date-only key (the
-/// ambient local offset, like every day window). Deliberately NOT wired to
-/// [dayTickProvider]: a sheet lives for a single interaction, so the
-/// midnight wake-up signal is irrelevant here — reopening the sheet re-reads.
-final goalSheetExerciseKcalProvider = FutureProvider<int>((ref) async {
+/// A live read over the exercise port for today's date-only key (the ambient
+/// local offset, like every day window), re-derived on [dayTickProvider] so a
+/// sheet open across midnight reports the new day. The one-shot `Future` read
+/// it replaces completed once per process — Riverpod keeps a manual provider's
+/// value forever — so after the first open the preview never moved again: a
+/// burn logged later the same day, and yesterday's burn after rollover, both
+/// stuck on screen despite the "reopening re-reads" promise.
+final goalSheetExerciseKcalProvider = StreamProvider<int>((ref) {
   final Clock clock = ref.watch(profileClockProvider);
+  ref.watch(dayTickProvider);
   final DateTime now = clock.now();
   final LocalOffset offset = LocalOffset(now.timeZoneOffset.inMinutes);
   final DateTime dayKey = currentDayKey(clock: clock, offset: offset);
-  final List<DailyExercise> rows = await ref
+  return ref
       .watch(exerciseRepositoryProvider)
       .watchRange(
         startInclusive: dayKey,
         endExclusive: dayKey.add(const Duration(days: 1)),
       )
-      .first;
-  return rows.fold<int>(0, (int sum, DailyExercise e) => sum + e.kcal);
+      .map(
+        (List<DailyExercise> rows) =>
+            rows.fold<int>(0, (int sum, DailyExercise e) => sum + e.kcal),
+      );
 });
