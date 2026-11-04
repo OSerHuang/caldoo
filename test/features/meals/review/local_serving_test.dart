@@ -25,6 +25,8 @@ import 'package:caldoo/features/meals/review/label_link_row.dart';
 import 'package:caldoo/features/meals/review/label_linker.dart';
 import 'package:caldoo/features/meals/review/meal_review_screen.dart';
 import 'package:caldoo/features/meals/review/review_item_card.dart';
+import 'package:caldoo/features/meals/saved_foods/saved_food_picker.dart'
+    show savedFoodTileKey;
 
 import '../../../data/repositories/fake_repositories.dart';
 import '_fakes.dart';
@@ -55,6 +57,21 @@ const Food lidl = Food(
   proteinG: 27,
   fatG: 29,
   sodiumMg: 280,
+);
+
+/// A record with no serving list: a match on it can auto-apply the name but
+/// never grams, which is the 更换 entry point.
+const Food generic = Food(
+  id: 'food-generic',
+  name: 'Emmental 奶酪',
+  brand: 'Generic',
+  servings: <FoodServing>[],
+  source: FoodSource.label,
+  kcal: 250,
+  carbG: 8,
+  proteinG: 19,
+  fatG: 16,
+  sodiumMg: 900,
 );
 
 MealItem cheeseItem() => const MealItem(
@@ -230,6 +247,39 @@ void main() {
         ),
       ),
     );
+    expect(field(tester, reviewGramsKey('item-cheese')), '50');
+    expect(field(tester, reviewNameKey('item-cheese')), 'Emmental 奶酪片');
+  });
+
+  testWidgets('更换到 一片 25 g 的记录：按原文 两片 补成 50 g', (WidgetTester tester) async {
+    // Top-1 auto-applies a record with NO serving list, so the grams stay the
+    // AI guess; the user re-picks through 更换 and the chosen food's serving
+    // grams must then apply (the row is still untouched).
+    await pumpReview(
+      tester,
+      foods: <Food>[colruyt, generic],
+      linker: FakeLinker(
+        (List<Food> foods) => LabelLinkResult(
+          matches: <LabelMatch>[
+            LabelMatch(
+              itemIndex: 0,
+              foodIndex: indexOf(foods, generic.id),
+              count: 2,
+              servingLabel: '一片',
+            ),
+          ],
+        ),
+      ),
+    );
+    expect(field(tester, reviewGramsKey('item-cheese')), '40');
+    expect(field(tester, reviewNameKey('item-cheese')), 'Emmental 奶酪');
+
+    await tester.ensureVisible(find.byKey(labelLinkChangeKey('item-cheese')));
+    await tester.tap(find.byKey(labelLinkChangeKey('item-cheese')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(savedFoodTileKey(colruyt.id)));
+    await tester.pumpAndSettle();
+
     expect(field(tester, reviewGramsKey('item-cheese')), '50');
     expect(field(tester, reviewNameKey('item-cheese')), 'Emmental 奶酪片');
   });
