@@ -553,17 +553,33 @@ void main() {
       );
     });
 
-    test('a preset that resolves to a non-positive goal throws', () {
-      final UserProfile profile = _male30.copyWith(
-        dailyGoalPreset: DailyGoalPreset.fastCut,
-      );
-      for (final int bmr in <int>[500, 400]) {
-        expect(
-          () => resolveDailyGoalKcal(profile, bmrKcal: bmr),
-          throwsArgumentError,
-          reason: 'bmr=$bmr',
+    test(
+      'a preset that resolves to a non-positive goal degrades to no goal',
+      () {
+        // A profile can become unable to express its preset (the BMR dropped,
+        // or a pinned override is too low). Read paths must stay renderable,
+        // so the engine falls back to the maintain budget instead of throwing.
+        final UserProfile profile = _male30.copyWith(
+          dailyGoalPreset: DailyGoalPreset.fastCut,
         );
-      }
-    });
+        for (final int bmr in <int>[500, 400]) {
+          expect(
+            resolveDailyGoalKcal(profile, bmrKcal: bmr),
+            isNull,
+            reason: 'bmr=$bmr',
+          );
+        }
+        final budget = _budgetOf(
+          computeEnergyBudget(
+            profile: profile.copyWith(bmrKcalOverride: 400),
+            intakeKcal: 0,
+            today: _today,
+          ),
+        );
+        expect(budget.goalKcal, isNull);
+        expect(budget.baseBudgetKcal, 400);
+        expect(budget.budgetKcal, 400);
+      },
+    );
   });
 }

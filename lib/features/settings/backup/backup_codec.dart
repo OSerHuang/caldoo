@@ -8,6 +8,7 @@ library;
 
 import 'dart:convert';
 
+import 'package:caldoo/core/math/energy_balance.dart';
 import 'package:caldoo/core/time/date_windows.dart' show MealWithItems;
 import 'package:caldoo/domain/models/daily_exercise.dart';
 import 'package:caldoo/domain/models/food.dart';
@@ -137,29 +138,62 @@ UserProfile? _decodeProfile(Object? value, {required DateTime now}) {
   if (value is! Map<String, dynamic>) {
     throw const BackupFormatException('profile must be a JSON object');
   }
+  final UserProfile profile;
   if (value.containsKey('birthDate')) {
-    return UserProfile.fromJson(value);
+    profile = UserProfile.fromJson(value);
+  } else {
+    // Legacy (schema 2): the profile stored `age` in whole years. Back-project
+    // a birthday as of [now] so the imported age is exactly the stored one;
+    // from then on the age follows the birthday (no yearly edit).
+    final Object? rawAge = value['age'];
+    if (rawAge is! num || rawAge <= 0) {
+      throw const BackupFormatException(
+        'legacy profile.age must be a positive number',
+      );
+    }
+    final int age = rawAge.toInt();
+    profile = UserProfile.fromJson(<String, dynamic>{
+      ...value,
+      'age': null,
+      'birthDate': DateTime.utc(
+        now.year - age,
+        now.month,
+        now.day,
+      ).toIso8601String(),
+    });
   }
+  _checkProfileGoals(profile, now: now);
+  return profile;
+}
 
-  // Legacy (schema 2): the profile stored `age` in whole years. Back-project a
-  // birthday as of [now] so the imported age is exactly the stored one; from
-  // then on the age follows the birthday (no yearly edit).
-  final Object? rawAge = value['age'];
-  if (rawAge is! num || rawAge <= 0) {
+/// Rejects a decoded profile the energy engine cannot interpret.
+///
+/// A backup is untrusted input: `UserProfile.fromJson` happily accepts both
+/// goal fields at once, and a preset may resolve to a non-positive goal on its
+/// own BMR. Letting either reach the database would make every budget read
+/// throw (the pages would be unusable, with no in-app way to fix the profile),
+/// so both are rejected here as typed format errors instead.
+void _checkProfileGoals(UserProfile profile, {required DateTime now}) {
+  if (profile.dailyGoalPreset != null &&
+      profile.dailyKcalGoalOverride != null) {
     throw const BackupFormatException(
-      'legacy profile.age must be a positive number',
+      'profile carries both dailyGoalPreset and dailyKcalGoalOverride; '
+      'the two daily-goal representations are mutually exclusive',
     );
   }
-  final int age = rawAge.toInt();
-  return UserProfile.fromJson(<String, dynamic>{
-    ...value,
-    'age': null,
-    'birthDate': DateTime.utc(
-      now.year - age,
-      now.month,
-      now.day,
-    ).toIso8601String(),
-  });
+  final EnergyBudgetResult budget;
+  try {
+    budget = computeEnergyBudget(profile: profile, intakeKcal: 0, today: now);
+  } on ArgumentError catch (error) {
+    throw BackupFormatException('profile is not usable: ${error.message}');
+  }
+  if (profile.dailyGoalPreset != null &&
+      budget is EnergyBudget &&
+      budget.goalKcal == null) {
+    throw const BackupFormatException(
+      'profile dailyGoalPreset resolves to a non-positive daily goal',
+    );
+  }
 }
 
 List<T> _decodeList<T>(

@@ -5,7 +5,8 @@
 /// * a preset (缓慢减脂 −250, 较快减脂 −500, 增肌增重 +250 kcal/day — the
 ///   1 kg ≈ 7700 kcal convention) is RELATIVE to the resolved BMR: it is
 ///   stored as [DailyGoalPreset] and re-derived by the energy engine on every
-///   read, so a body-weight change moves the goal with it;
+///   read, so a BMR change (a new weight while the BMR is derived) moves the
+///   goal with it;
 /// * a custom number is what the user typed: it is stored as
 ///   [UserProfile.dailyKcalGoalOverride] and stays fixed, weight change or not;
 /// * 维持体重 / a blank custom field stores neither (the budget falls back to
@@ -225,7 +226,7 @@ class _DailyGoalSheetState extends ConsumerState<DailyGoalSheet> {
         ref.watch(goalSheetExerciseKcalProvider).value ?? 0;
     final int? effective = _effectiveGoal;
 
-    return Padding(
+    return SingleChildScrollView(
       padding: EdgeInsets.only(
         left: AppDim.pagePadding,
         right: AppDim.pagePadding,

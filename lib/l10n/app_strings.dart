@@ -1404,7 +1404,7 @@ class S {
   String get dailyGoalSubtitleNone => '未设置，按基础代谢计算每日额度';
 
   /// Daily-goal card subtitle: the goal equals the resolved BMR.
-  String get dailyGoalSubtitleMaintain => '维持体重，与基础代谢相同';
+  String get dailyGoalSubtitleMaintain => '维持体重，与基础代谢相同（固定值）';
 
   /// Daily-goal card subtitle for a FIXED custom goal below the resolved BMR
   /// (`diff` kcal/day): the number does not follow the weight.
@@ -1415,12 +1415,19 @@ class S {
   String dailyGoalSubtitleGain(int diff) => '高于基础代谢 $diff 大卡/日（固定值，不随体重变化）';
 
   /// Daily-goal card subtitle for a PRESET goal below the resolved BMR
-  /// (`diff` kcal/day): re-derived from the BMR, so it follows the weight.
-  String dailyGoalSubtitlePresetCut(int diff) => '低于基础代谢 $diff 大卡/日，随体重自动更新';
+  /// (`diff` kcal/day): re-derived from the BMR, so it follows a derived BMR
+  /// (and therefore the weight).
+  String dailyGoalSubtitlePresetCut(int diff) => '低于基础代谢 $diff 大卡/日，随基础代谢自动更新';
 
   /// Daily-goal card subtitle for a PRESET goal above the resolved BMR
-  /// (`diff` kcal/day): re-derived from the BMR, so it follows the weight.
-  String dailyGoalSubtitlePresetGain(int diff) => '高于基础代谢 $diff 大卡/日，随体重自动更新';
+  /// (`diff` kcal/day): re-derived from the BMR, so it follows a derived BMR
+  /// (and therefore the weight).
+  String dailyGoalSubtitlePresetGain(int diff) => '高于基础代谢 $diff 大卡/日，随基础代谢自动更新';
+
+  /// Daily-goal card subtitle when a preset is stored but resolves to a
+  /// non-positive goal on the current BMR (the engine then falls back to the
+  /// "maintain" budget): the user must re-pick the goal.
+  String get dailyGoalSubtitlePresetUnavailable => '当前基础代谢下该档位无效，请重新选择目标';
 
   /// Goal sheet title.
   String get dailyGoalSheetTitle => '每日热量目标';
@@ -1430,7 +1437,8 @@ class S {
 
   /// Goal sheet note explaining preset vs custom semantics: a preset follows
   /// the BMR (hence the body weight), a custom number stays fixed.
-  String get goalSheetPresetNote => '档位按基础代谢计算，体重变化后每日额度会自动更新；自定义数值固定不变。';
+  String get goalSheetPresetNote =>
+      '档位按基础代谢计算；基础代谢会随体重等资料自动重算，每日额度随之更新；自定义数值固定不变。';
 
   /// Preset: keep the resolved BMR (no explicit goal).
   String get goalPresetMaintain => '维持体重';

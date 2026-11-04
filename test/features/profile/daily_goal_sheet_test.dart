@@ -33,9 +33,11 @@ void main() {
     WidgetTester tester, {
     UserProfile? stored,
     int bmrKcal = 1649,
+    Size size = const Size(900, 1500),
   }) async {
-    // Tall enough for the whole sheet (presets + note + preview + actions).
-    tester.view.physicalSize = const Size(900, 1500);
+    // Tall enough for the whole sheet (presets + note + preview + actions)
+    // unless a test deliberately uses a short viewport.
+    tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -90,7 +92,10 @@ void main() {
 
     // The preset-vs-custom explanation is always visible.
     expect(find.byKey(goalPresetNoteKey), findsOneWidget);
-    expect(find.text('档位按基础代谢计算，体重变化后每日额度会自动更新；自定义数值固定不变。'), findsOneWidget);
+    expect(
+      find.text('档位按基础代谢计算；基础代谢会随体重等资料自动重算，每日额度随之更新；自定义数值固定不变。'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a preset drives the preview equation', (
@@ -219,6 +224,44 @@ void main() {
       '1234',
     );
     expect(find.text('目标 1234 + 运动 220 = 每日额度 1454 大卡'), findsOneWidget);
+  });
+
+  testWidgets('a short viewport does not overflow (body scrolls)', (
+    WidgetTester tester,
+  ) async {
+    // 320x600 is a small phone; the sheet is taller than that, so the body
+    // must be scrollable instead of overflowing the sheet.
+    await pumpSheet(tester, size: const Size(320, 600));
+
+    expect(find.byKey(goalPreviewKey), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(goalSaveKey),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.byKey(goalSaveKey), findsOneWidget);
+  });
+
+  testWidgets('a preset that resolves to a non-positive goal is rejected', (
+    WidgetTester tester,
+  ) async {
+    // The sheet receives the resolved BMR from the caller; a low enough BMR
+    // makes the preset goal impossible, and 保存 must refuse rather than store
+    // an unusable goal.
+    final FakeProfileRepository repo = await pumpSheet(
+      tester,
+      stored: profile.copyWith(dailyGoalPreset: DailyGoalPreset.fastCut),
+      bmrKcal: 400,
+    );
+
+    await tester.tap(find.byKey(goalSaveKey));
+    await tester.pump();
+
+    expect(find.byKey(const Key('goal_validation_error')), findsOneWidget);
+    expect(
+      (await repo.loadProfile())!.dailyGoalPreset,
+      DailyGoalPreset.fastCut,
+    );
   });
 
   testWidgets('a custom goal below 1200 shows the non-blocking hint', (

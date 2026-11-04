@@ -19,6 +19,7 @@ import 'package:caldoo/core/providers/app_providers.dart';
 import 'package:caldoo/core/units/display_units.dart';
 import 'package:caldoo/core/units/nutrition_units.dart';
 import 'package:caldoo/domain/models/user_profile.dart';
+import 'package:caldoo/features/profile/daily_goal_sheet.dart';
 import 'package:caldoo/features/profile/profile_providers.dart';
 import 'package:caldoo/features/profile/profile_screen.dart';
 
@@ -416,7 +417,7 @@ void main() {
     final UserProfile? saved = await repo.loadProfile();
     expect(saved!.dailyGoalPreset, DailyGoalPreset.gain);
     expect(saved.dailyKcalGoalOverride, isNull);
-    expect(find.text('高于基础代谢 250 大卡/日，随体重自动更新'), findsOneWidget);
+    expect(find.text('高于基础代谢 250 大卡/日，随基础代谢自动更新'), findsOneWidget);
   });
 
   testWidgets('a preset goal follows a body-weight change automatically', (
@@ -431,7 +432,7 @@ void main() {
 
     // BMR 1649 - 250 = 1399.
     expect(_goalValue(tester), '1399 kcal');
-    expect(find.text('低于基础代谢 250 大卡/日，随体重自动更新'), findsOneWidget);
+    expect(find.text('低于基础代谢 250 大卡/日，随基础代谢自动更新'), findsOneWidget);
     EnergyBudget budget =
         container.read(profileBudgetProvider)! as EnergyBudget;
     expect(budget.bmrKcal, _maleBmr);
@@ -452,7 +453,7 @@ void main() {
     expect(_fieldText(tester, 'profile_weight_field'), '68.4');
     expect(_bmrText(tester), '1633');
     expect(_goalValue(tester), '1383 kcal');
-    expect(find.text('低于基础代谢 250 大卡/日，随体重自动更新'), findsOneWidget);
+    expect(find.text('低于基础代谢 250 大卡/日，随基础代谢自动更新'), findsOneWidget);
     budget = container.read(profileBudgetProvider)! as EnergyBudget;
     expect(budget.goalKcal, 1383);
     expect(budget.baseBudgetKcal, 1383);
@@ -461,6 +462,38 @@ void main() {
     await tester.tap(find.byKey(const Key('profile_daily_goal')));
     await tester.pumpAndSettle();
     expect(find.text('目标 1383 + 运动 0 = 每日额度 1383 大卡'), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.close));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('an unresolvable preset card stays tappable with a warning', (
+    WidgetTester tester,
+  ) async {
+    // A pinned BMR can become too low to express the stored preset. The engine
+    // degrades to the maintain budget instead of throwing, so the page must
+    // still render and the card must stay tappable so the user can re-pick.
+    final FakeProfileRepository repo = FakeProfileRepository();
+    addTearDown(repo.dispose);
+    await repo.saveProfile(
+      _autoProfile.copyWith(
+        bmrKcalOverride: 400,
+        dailyGoalPreset: DailyGoalPreset.fastCut,
+      ),
+    );
+    final ProviderContainer container = await _pumpProfile(tester, repo);
+
+    expect(find.byKey(const Key('profile_daily_goal')), findsOneWidget);
+    expect(_goalValue(tester), '未设置');
+    expect(find.text('当前基础代谢下该档位无效，请重新选择目标'), findsOneWidget);
+    final budget = container.read(profileBudgetProvider)! as EnergyBudget;
+    expect(budget.goalKcal, isNull);
+    expect(budget.baseBudgetKcal, 400);
+
+    // The goal sheet still opens (pre-seeding the broken preset) so the user
+    // can choose another row and recover.
+    await tester.tap(find.byKey(const Key('profile_daily_goal')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(goalSaveKey), findsOneWidget);
     await tester.tap(find.byIcon(Icons.close));
     await tester.pumpAndSettle();
   });

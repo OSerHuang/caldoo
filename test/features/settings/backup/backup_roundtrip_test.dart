@@ -376,6 +376,60 @@ void main() {
     });
   });
 
+  group('v6 profile goal validation on import', () {
+    String v6Payload(Map<String, Object?> profile) =>
+        jsonEncode(<String, Object?>{
+          'schemaVersion': 6,
+          'profile': <String, Object?>{
+            'sex': 'male',
+            'birthDate': DateTime.utc(1996, 10, 22).toIso8601String(),
+            'heightCm': 175,
+            'weightKg': 70,
+            ...profile,
+          },
+          'foods': <Object?>[],
+          'meals': <Object?>[],
+          'dailyExercises': <Object?>[],
+          'weightEntries': <Object?>[],
+          'settings': <String, String>{},
+        });
+
+    test('a profile with BOTH goal representations is rejected', () {
+      final String payload = v6Payload(<String, Object?>{
+        'dailyGoalPreset': 'slowCut',
+        'dailyKcalGoalOverride': 1399,
+      });
+      expect(
+        () => decodeBackup(payload, now: pinnedNow),
+        throwsA(isA<BackupFormatException>()),
+        reason: 'the engine cannot choose between a preset and a fixed goal',
+      );
+    });
+
+    test('a preset that resolves to a non-positive goal is rejected', () {
+      // fastCut = BMR - 500; a pinned BMR of 400 makes it -100, which the
+      // engine would degrade to "maintain" — a hand-edited backup must be
+      // refused outright instead of silently losing the goal.
+      final String payload = v6Payload(<String, Object?>{
+        'bmrKcalOverride': 400,
+        'dailyGoalPreset': 'fastCut',
+      });
+      expect(
+        () => decodeBackup(payload, now: pinnedNow),
+        throwsA(isA<BackupFormatException>()),
+      );
+    });
+
+    test('a valid v6 preset still decodes', () {
+      final String payload = v6Payload(<String, Object?>{
+        'dailyGoalPreset': 'slowCut',
+      });
+      final BackupData data = decodeBackup(payload, now: pinnedNow);
+      expect(data.profile!.dailyGoalPreset, DailyGoalPreset.slowCut);
+      expect(data.profile!.dailyKcalGoalOverride, isNull);
+    });
+  });
+
   group('legacy schemaVersion 2 profile (stored age) import', () {
     late AppDatabase db;
 

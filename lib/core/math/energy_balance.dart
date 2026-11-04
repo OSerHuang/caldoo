@@ -24,8 +24,9 @@
 /// unaffected by later weight changes) or a [DailyGoalPreset] expressed
 /// RELATIVE to the resolved BMR. The preset is re-derived on every read, so a
 /// body-weight change flows through the anthropometrics → BMR → goal and the
-/// daily budget follows it. Exercise stays a separate add-back that can never
-/// be double-counted.
+/// daily budget follows it (when the user pinned the BMR, the preset is
+/// relative to that fixed number instead). Exercise stays a separate add-back
+/// that can never be double-counted.
 ///
 /// ## Every energy number is a whole kcal integer
 ///
@@ -192,8 +193,15 @@ int resolveBmrKcal(UserProfile profile, {required DateTime today}) {
 ///
 /// [bmrKcal] must be the resolved BMR for the same profile ([resolveBmrKcal]).
 /// A profile that carries both is malformed (the goal sheet never writes both)
-/// and throws an [ArgumentError]; so does a goal that resolves to zero or less
-/// — the engine never lets a malformed number poison a day total.
+/// and throws an [ArgumentError]. A fixed override that is not positive also
+/// throws — the engine never lets a malformed number poison a day total.
+///
+/// A preset that would resolve to zero or less is NOT an error at read time:
+/// it can happen to an otherwise valid profile (a much lower BMR later, or a
+/// manually pinned BMR typed too low). There is no positive number to report,
+/// so the goal degrades to `null` — the "maintain" budget (the resolved BMR) —
+/// which keeps every read path renderable so the user can reach the goal sheet
+/// and re-pick. The profile screen labels that state explicitly.
 int? resolveDailyGoalKcal(UserProfile profile, {required int bmrKcal}) {
   final DailyGoalPreset? preset = profile.dailyGoalPreset;
   final int? override = profile.dailyKcalGoalOverride;
@@ -206,12 +214,10 @@ int? resolveDailyGoalKcal(UserProfile profile, {required int bmrKcal}) {
   if (preset != null) {
     final int goal = bmrKcal + preset.deltaKcal;
     if (goal <= 0) {
-      throw ArgumentError.value(
-        goal,
-        'dailyGoalPreset',
-        'must resolve to a positive goal (BMR $bmrKcal '
-            '${preset.deltaKcal >= 0 ? '+' : '−'} ${preset.deltaKcal.abs()})',
-      );
+      // Not expressible on this BMR (e.g. the BMR dropped, or a pinned
+      // override is too low): fall back to "maintain" rather than throwing at
+      // read time, so a page still renders and the user can re-pick the goal.
+      return null;
     }
     return goal;
   }

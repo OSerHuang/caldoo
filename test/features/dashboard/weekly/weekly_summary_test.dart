@@ -153,6 +153,15 @@ void main() {
         expect(summary.bmrKcal, 1599);
         expect(summary.goalKcal, 1349);
       });
+
+      test('热量达标 is judged against the preset goal', () {
+        // gain: 1649 + 250 = 1899 -> Tue 1500 and Thu 1800 are adherent.
+        final WeeklySummary summary = summaryOf(
+          derived.copyWith(dailyGoalPreset: DailyGoalPreset.gain),
+        );
+        expect(summary.goalKcal, 1899);
+        expect(summary.goalAdherentDays, 2);
+      });
     },
   );
 

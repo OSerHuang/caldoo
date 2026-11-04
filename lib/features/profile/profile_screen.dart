@@ -478,7 +478,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             final DailyGoalPreset? preset = stored.dailyGoalPreset;
             final String subtitle;
             if (goal == null) {
-              subtitle = S.of(context).dailyGoalSubtitleNone;
+              // A stored preset can stop being expressible on the current BMR
+              // (it degrades to the "maintain" budget in the engine); say so
+              // and keep the card tappable so the user can re-pick.
+              subtitle = preset != null
+                  ? S.of(context).dailyGoalSubtitlePresetUnavailable
+                  : S.of(context).dailyGoalSubtitleNone;
             } else if (preset != null) {
               subtitle = goal < bmr
                   ? S.of(context).dailyGoalSubtitlePresetCut(bmr - goal)

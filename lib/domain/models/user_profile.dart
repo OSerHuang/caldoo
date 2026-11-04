@@ -12,11 +12,13 @@ enum Sex { male, female }
 ///
 /// Unlike [UserProfile.dailyKcalGoalOverride] — an absolute number that stays
 /// fixed once saved — a preset is re-derived from the *current* BMR on every
-/// read by the energy engine (`computeEnergyBudget`). Because the BMR itself is
-/// computed from the anthropometrics (above all the body weight), a preset goal
-/// follows the user's weight: record a lighter weight and tomorrow's daily
-/// budget is lower by the same number of kcal. That is exactly what the presets
-/// mean ("基础代谢 −250 / −500 / +250 kcal/day").
+/// read by the energy engine (`computeEnergyBudget`). The BMR itself is
+/// computed from the anthropometrics (above all the body weight) unless the
+/// user pinned it ([UserProfile.bmrKcalOverride]), so a preset goal follows the
+/// weight while the BMR is derived: record a lighter weight and tomorrow's
+/// daily budget is lower by the same number of kcal. With a pinned BMR the
+/// preset is relative to that fixed number instead. That is exactly what the
+/// presets mean ("基础代谢 −250 / −500 / +250 kcal/day").
 ///
 /// A preset and [UserProfile.dailyKcalGoalOverride] are **mutually exclusive**:
 /// the goal sheet always clears one when it writes the other, and the energy
