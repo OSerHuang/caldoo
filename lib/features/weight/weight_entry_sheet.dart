@@ -124,6 +124,14 @@ class _WeightEntrySheetState extends ConsumerState<WeightEntrySheet> {
     await ref
         .read(weightRepositoryProvider)
         .saveWeight(dayKey: _day, weightKg: parsed);
+    // An edit that MOVED the day must not leave the old row behind — that
+    // would be the same weigh-in counted on two days (deltas, sparkline and
+    // 近7天 all read doubles). Save first, then drop the old day: a failure
+    // in between leaves a duplicate, never a lost entry.
+    final WeightEntry? existing = widget.existing;
+    if (existing != null && existing.dayKey != _day) {
+      await ref.read(weightRepositoryProvider).deleteDay(existing.dayKey);
+    }
     if (mounted) {
       Navigator.of(context).pop();
     }
