@@ -201,6 +201,39 @@ void main() {
       expect((await repo.getDay(DateTime.utc(2026, 10, 30)))!.weightKg, 68.0);
     });
 
+    testWidgets('moving an edit to another day relocates the entry', (
+      WidgetTester tester,
+    ) async {
+      final FakeWeightRepository repo = await pumpTrend(
+        tester,
+        entries: entries,
+      );
+
+      await tester.tap(find.byKey(weightRowKey(DateTime.utc(2026, 10, 30))));
+      await tester.pumpAndSettle();
+
+      // Move the 10/30 weigh-in to 10/29 through the date picker.
+      await tester.tap(find.byKey(weightDateFieldKey));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('29'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(weightSaveKey));
+      await tester.pumpAndSettle();
+
+      expect(
+        (await repo.getDay(DateTime.utc(2026, 10, 29)))!.weightKg,
+        68.4,
+        reason: 'the entry landed on the picked day',
+      );
+      expect(
+        await repo.getDay(DateTime.utc(2026, 10, 30)),
+        isNull,
+        reason: 'the old day must not keep a duplicate weigh-in',
+      );
+    });
+
     testWidgets('empty history shows the empty state with a record action', (
       WidgetTester tester,
     ) async {
