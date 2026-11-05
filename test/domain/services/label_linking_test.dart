@@ -870,6 +870,24 @@ void main() {
         parseLocalQuantity('两份米饭'),
         const LocalQuantity(count: 2, unit: '份'),
       );
+      expect(
+        parseLocalQuantity('两片半奶酪'),
+        const LocalQuantity(count: 2.5, unit: '片'),
+        reason: 'a 半 directly after the unit completes the count',
+      );
+      expect(
+        parseLocalQuantity('2块半'),
+        const LocalQuantity(count: 2.5, unit: '块'),
+      );
+      expect(
+        parseLocalQuantity('一片半'),
+        const LocalQuantity(count: 1.5, unit: '片'),
+      );
+      expect(
+        parseLocalQuantity('两片半个鸡蛋'),
+        isNull,
+        reason: 'a second quantity stays ambiguous, suffix or not',
+      );
     });
 
     test('refuses ambiguous or non-portion texts', () {
