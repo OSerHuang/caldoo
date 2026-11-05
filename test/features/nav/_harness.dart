@@ -12,6 +12,7 @@
 ///   +08:00 instant.
 library;
 
+import 'package:clock/clock.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -82,6 +83,9 @@ class NavTestEnv {
   /// production defaults (which those tests must not touch).
   /// [extraOverrides] are appended last, so a test can replace any further seam
   /// (e.g. `labelLinkerProvider`) without touching the shared defaults.
+  /// [now] re-pins every clock seam to a different instant (same +08:00
+  /// offset), for tests that need a fixture date the shared instant cannot
+  /// express — the first days of January, say.
   Future<void> pump(
     WidgetTester tester, {
     bool withProfile = true,
@@ -92,6 +96,7 @@ class NavTestEnv {
     Dio? dio,
     SecureKeyStore? keyStore,
     AppDatabase? database,
+    DateTime? now,
     List<Override> extraOverrides = const <Override>[],
   }) async {
     if (withProfile) {
@@ -101,6 +106,7 @@ class NavTestEnv {
     // settings DAO through [appDatabaseProvider]; give every test an in-memory
     // database so no test ever opens the on-disk file DB.
     final AppDatabase db = database ?? (_ownedDb ??= testDb());
+    final Clock clock = now == null ? dashboardClock() : Clock.fixed(now);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -109,18 +115,18 @@ class NavTestEnv {
           profileRepositoryProvider.overrideWithValue(profile),
           weightRepositoryProvider.overrideWithValue(weights),
           // task-24 daily dashboard time seam
-          dashboardClockProvider.overrideWithValue(dashboardClock()),
+          dashboardClockProvider.overrideWithValue(clock),
           dashboardOffsetProvider.overrideWithValue(dashboardOffset),
           // The merged 今日 tab also mounts the week and month dashboards, so
           // pin their time seams to the same instant as the day view; a test
           // that only exercises the day view would otherwise read the real
           // clock through those offstage views.
-          weeklyClockProvider.overrideWithValue(dashboardClock()),
+          weeklyClockProvider.overrideWithValue(clock),
           weeklyOffsetProvider.overrideWithValue(dashboardOffset),
-          monthlyClockProvider.overrideWithValue(dashboardClock()),
+          monthlyClockProvider.overrideWithValue(clock),
           monthlyOffsetProvider.overrideWithValue(dashboardOffset),
           // task-22 per-meal summary time seam
-          summaryClockProvider.overrideWithValue(dashboardClock()),
+          summaryClockProvider.overrideWithValue(clock),
           localOffsetProvider.overrideWithValue(dashboardOffset),
           // The current-day seams follow the day-tick signal; the harness pins
           // the day instead, so the tick stays quiet (and its production
