@@ -22,13 +22,14 @@ class DriftFoodRepository implements FoodRepository {
       _db.foodDao.insertFood(_companion(food));
 
   @override
-  Future<void> upsertFood(Food food) async {
-    // `update(replace)` returns false when the row is absent; otherwise it is
-    // a full-row replace, so nulls in `food` overwrite stale stored values.
-    final replaced = await _db.foodDao.updateFood(_companion(food));
-    if (!replaced) {
-      await _db.foodDao.insertFood(_companion(food));
-    }
+  Future<void> upsertFood(Food food) {
+    // One atomic statement — insert, or on a duplicate id a full-row replace,
+    // so nulls in `food` overwrite stale stored values. The two-step
+    // update-then-insert this replaces had the same row semantics but an
+    // interleaving window: two concurrent upserts of a NEW food both saw
+    // "absent" and the second insert died on the UNIQUE constraint, and a
+    // concurrent delete between the steps resurrected the row.
+    return _db.foodDao.upsertFood(_companion(food));
   }
 
   @override
