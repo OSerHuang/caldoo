@@ -2,8 +2,9 @@
 ///
 /// Shows two blocks for one logged meal:
 /// * **本餐合计** — this meal's kcal / macros / salt, summed from its items;
-/// * **今日累计** — the running day intake, driven by the repository `watch`
-///   stream through [todayTotalsProvider] (never a cached read).
+/// * **今日累计 / 当日累计** — the running day intake of the MEAL'S OWN day,
+///   driven by the repository `watch` stream (never a cached read): today's
+///   meal shows 今日累计, a history meal shows 当日累计 for its own day.
 ///
 /// Both blocks are read-only, so they follow the display-unit preference
 /// (`DisplayUnits.of`): energy shows kcal or kJ, and the salt row shows salt
@@ -13,7 +14,8 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:caldoo/core/time/date_windows.dart' show wallClockOf;
+import 'package:caldoo/core/time/date_windows.dart'
+    show LocalOffset, currentDayKey, dayKeyOf, wallClockOf;
 import 'package:caldoo/core/units/display_units.dart';
 import 'package:caldoo/domain/models/models.dart';
 import 'package:caldoo/l10n/app_format.dart';
@@ -78,14 +80,22 @@ class MealSummaryCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final ThemeData theme = Theme.of(context);
     final MealTotals mealTotals = MealTotals.fromItems(items);
-    final MealTotals dayTotals = ref.watch(todayTotalsProvider);
+    // The 累计 line is the meal's OWN day's running total: a past-day meal
+    // opened from history must show that day's numbers, never the wall-clock
+    // day's (the old hardwired 今日 stream paired Monday's meal with
+    // Wednesday's running intake).
+    final LocalOffset offset = ref.watch(localOffsetProvider);
+    final DateTime mealDayKey = dayKeyOf(meal.timestamp, offset);
+    final bool isToday =
+        mealDayKey ==
+        currentDayKey(clock: ref.watch(summaryClockProvider), offset: offset);
+    final MealTotals dayTotals = isToday
+        ? ref.watch(todayTotalsProvider)
+        : ref.watch(dayTotalsForDayProvider(mealDayKey));
     // The time the record is attributed to, resolved to the app's own local
     // wall clock (never the machine timezone): a mis-stamped meal is otherwise
     // indistinguishable from a correctly stamped one on the day log.
-    final DateTime wallClock = wallClockOf(
-      meal.timestamp,
-      ref.watch(localOffsetProvider),
-    );
+    final DateTime wallClock = wallClockOf(meal.timestamp, offset);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -114,7 +124,9 @@ class MealSummaryCard extends ConsumerWidget {
             ),
             const Divider(height: 24),
             _TotalsBlock(
-              title: S.of(context).mealTotalsToday,
+              title: isToday
+                  ? S.of(context).mealTotalsToday
+                  : S.of(context).mealTotalsThatDay,
               kcalKey: dayTotalKcalKey,
               carbKey: dayTotalCarbKey,
               proteinKey: dayTotalProteinKey,

@@ -72,6 +72,42 @@ final todayTotalsProvider = Provider<MealTotals>((ref) {
   return MealTotals.fromMeals(meals);
 });
 
+/// The meals **with their items** of the local day [dayKey], live from the
+/// repository — the day-scoped twin of [todayMealsProvider], so a PAST day's
+/// detail card can show that day's own running total.
+final _dayMealsForDayProvider =
+    StreamProvider.family<List<MealWithItems>, DateTime>((
+      ref,
+      DateTime dayKey,
+    ) {
+      final DateTime start = dayKey.subtract(
+        ref.watch(localOffsetProvider).duration,
+      );
+      return ref
+          .watch(mealRepositoryProvider)
+          .watchMealsForDay(
+            dayStartInclusive: start,
+            dayEndExclusive: start.add(const Duration(days: 1)),
+          );
+    });
+
+/// The running intake of the local day [dayKey] — the meal detail card's
+/// 累计 line for a meal's OWN day (a past-day meal opened from history must
+/// not show the wall-clock day's totals next to it).
+///
+/// Live like [todayTotalsProvider]; an empty (or still-loading) stream yields
+/// [MealTotals.zero] rather than an error, so the card always renders a
+/// number.
+final dayTotalsForDayProvider = Provider.family<MealTotals, DateTime>((
+  ref,
+  DateTime dayKey,
+) {
+  final List<MealWithItems> meals =
+      ref.watch(_dayMealsForDayProvider(dayKey)).value ??
+      const <MealWithItems>[];
+  return MealTotals.fromMeals(meals);
+});
+
 /// The validated save path used by the summary screen.
 final mealSaveControllerProvider = Provider<MealSaveController>(
   (ref) => MealSaveController(ref.watch(mealRepositoryProvider)),
