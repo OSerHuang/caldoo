@@ -172,7 +172,7 @@ Future<AiError> _captureError(
 
 void main() {
   group('AiError taxonomy', () {
-    test('is sealed: a switch over all seven variants is exhaustive', () {
+    test('is sealed: a switch over all eight variants is exhaustive', () {
       String describe(AiError error) => switch (error) {
         NoKey() => 'no-key',
         Unauthorized() => 'unauthorized',
@@ -181,6 +181,7 @@ void main() {
         Network() => 'network',
         MalformedResponse() => 'malformed',
         Server() => 'server',
+        Unknown() => 'unknown',
       };
       expect(
         <String>[
@@ -191,6 +192,7 @@ void main() {
           describe(const Network()),
           describe(const MalformedResponse()),
           describe(const Server(500)),
+          describe(const Unknown('settings config read failed')),
         ],
         <String>[
           'no-key',
@@ -200,6 +202,7 @@ void main() {
           'network',
           'malformed',
           'server',
+          'unknown',
         ],
       );
     });
