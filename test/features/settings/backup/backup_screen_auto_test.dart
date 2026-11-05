@@ -17,7 +17,11 @@ import 'package:caldoo/features/settings/backup/auto_backup_data.dart';
 import 'package:caldoo/features/settings/backup/auto_backup_providers.dart';
 import 'package:caldoo/features/settings/backup/auto_backup_service.dart';
 import 'package:caldoo/features/settings/backup/backup_service.dart';
+import 'package:caldoo/features/settings/ai_settings.dart';
 import 'package:caldoo/features/settings/backup/backup_screen.dart';
+import 'package:caldoo/core/units/display_units.dart' show EnergyDisplay;
+import 'package:caldoo/features/settings/display_settings.dart';
+import 'package:caldoo/features/settings/display_settings_providers.dart';
 import 'package:caldoo/features/settings/settings_providers.dart';
 
 import '../../../data/db/_test_db.dart';
@@ -142,6 +146,71 @@ void main() {
     await tester.scrollUntilVisible(find.byKey(backupResultKey), 200);
     expect(find.textContaining('导入完成'), findsOneWidget);
     expect(await DriftProfileRepository(db).loadProfile(), isNotNull);
+  });
+
+  testWidgets('restoring a copy re-reads the AI/display settings rows', (
+    tester,
+  ) async {
+    // The backup carries endpoint https://after.example + 千焦; those rows are
+    // then removed to model the fresh device the import guards against (the
+    // restore skips keys that already exist, so a drifted row would never be
+    // rewritten). The in-memory providers are loaded before the import and
+    // hold the pre-import defaults; without the invalidation the AI client
+    // would keep sending the key and meal text to the pre-import endpoint.
+    final AppSettingsStore settingsStore = AppSettingsStore(db.appSettingsDao);
+    await settingsStore.write(
+      AiSettingsRepository.baseUrlPrefKey,
+      'https://after.example',
+    );
+    await settingsStore.write(DisplaySettingsRepository.energyPrefKey, 'kj');
+    await _seedOneMeal(db);
+    final AutoBackupService service = AutoBackupService(
+      backupService: BackupService(db),
+      autoBackupStorage: storage,
+      settingsStore: settingsStore,
+      clock: Clock(() => DateTime(2026, 10, 30, 21, 30)),
+    );
+    final AutoBackupResult result = await service.runNow();
+    expect(result.didSave, isTrue);
+
+    // The device "loses" the imported settings rows (a fresh install has none).
+    await db.appSettingsDao.deleteValue(AiSettingsRepository.baseUrlPrefKey);
+    await db.appSettingsDao.deleteValue(
+      DisplaySettingsRepository.energyPrefKey,
+    );
+
+    await _pumpScreen(tester, db: db, storage: storage);
+    final ProviderContainer container = ProviderScope.containerOf(
+      tester.element(find.byType(BackupScreen)),
+    );
+    // Force-load the in-memory state: the pre-import defaults.
+    expect(
+      (await container.read(aiSettingsConfigProvider.future)).baseUrl,
+      isNot('https://after.example'),
+    );
+    expect(
+      (await container.read(displaySettingsProvider.future)).energy,
+      EnergyDisplay.kcal,
+    );
+
+    final Finder entryFinder = find.byKey(
+      autoBackupEntryKey('data-20261030-213000.json'),
+    );
+    await tester.scrollUntilVisible(entryFinder, 200);
+    await tester.tap(entryFinder);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(autoBackupRestoreConfirmKey));
+    await tester.pumpAndSettle();
+
+    // The settings-derived state re-read the imported rows.
+    expect(
+      (await container.read(aiSettingsConfigProvider.future)).baseUrl,
+      'https://after.example',
+    );
+    expect(
+      (await container.read(displaySettingsProvider.future)).energy,
+      EnergyDisplay.kj,
+    );
   });
 
   testWidgets('the manual backup button writes a copy and reports it', (

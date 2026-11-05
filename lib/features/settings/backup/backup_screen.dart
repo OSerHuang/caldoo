@@ -21,6 +21,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:caldoo/l10n/app_format.dart';
 import 'package:caldoo/l10n/app_strings.dart';
+import 'package:caldoo/features/settings/display_settings_providers.dart';
+import 'package:caldoo/features/settings/settings_providers.dart';
 
 import 'auto_backup_data.dart';
 import 'auto_backup_providers.dart';
@@ -153,6 +155,18 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
     });
   }
 
+  /// An import rewrote the `app_settings` rows (AI endpoint/model, display
+  /// units): the non-autoDispose providers keep their pre-import state for the
+  /// whole process unless invalidated here — the AI client would keep sending
+  /// the user's key and meal text to the PRE-IMPORT endpoint, the settings
+  /// forms would show stale values and a single 保存 would clobber the
+  /// imported ones back. The same refresh delete_all_data does after its wipe.
+  void _refreshSettingsDerivedState() {
+    ref.invalidate(settingsControllerProvider);
+    ref.invalidate(aiSettingsConfigProvider);
+    ref.invalidate(displaySettingsProvider);
+  }
+
   /// Runs one import through the shared busy/result handling.
   Future<void> _applyImport(Future<ImportSummary> Function() import) async {
     setState(() {
@@ -161,6 +175,7 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
     });
     try {
       final ImportSummary summary = await import();
+      _refreshSettingsDerivedState();
       if (mounted) {
         setState(
           () => _result = S.instance.backupImported(
@@ -262,6 +277,7 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
       final ImportSummary summary = await ref
           .read(autoBackupServiceProvider)
           .restore(entry);
+      _refreshSettingsDerivedState();
       if (mounted) {
         setState(
           () => _result = S.instance.backupImported(
