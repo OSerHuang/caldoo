@@ -20,6 +20,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:caldoo/core/providers/app_providers.dart'
     show connectivityProvider, foodRepositoryProvider, isOfflineProvider;
@@ -32,8 +33,13 @@ import 'package:caldoo/features/meals/capture/meal_capture_controller.dart';
 import 'package:caldoo/features/meals/capture/meal_capture_screen.dart';
 import 'package:caldoo/features/meals/capture/review_placeholder_screen.dart';
 import 'package:caldoo/features/settings/ai_settings.dart';
+import 'package:caldoo/ai/ai_client.dart' show Unknown;
 import 'package:caldoo/features/settings/settings_providers.dart'
-    show appDatabaseProvider, dioProvider, secureKeyStoreProvider;
+    show
+        aiSettingsConfigProvider,
+        appDatabaseProvider,
+        dioProvider,
+        secureKeyStoreProvider;
 import 'package:caldoo/l10n/app_strings.dart';
 import 'package:image/image.dart' as image;
 
@@ -56,6 +62,7 @@ Future<ProviderContainer> _pumpCapture(
   MealPhotoSource? gallerySource,
   RecordingReviewRouter? router,
   FoodRepository? foodRepository,
+  List<Override> extraOverrides = const <Override>[],
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -73,6 +80,7 @@ Future<ProviderContainer> _pumpCapture(
         if (gallerySource != null)
           galleryPhotoSourceProvider.overrideWithValue(gallerySource),
         if (router != null) reviewRouterProvider.overrideWithValue(router.call),
+        ...extraOverrides,
       ],
       child: const MaterialApp(home: MealCaptureScreen()),
     ),
@@ -204,6 +212,37 @@ void main() {
       'MEAL_CAPTURE_QA empty_submit_blocked=true buttonEnabled=false '
       'clientCalls=${mock.adapter.calls} -> PASS',
     );
+  });
+
+  testWidgets('a failing settings-config read fails the submit, not the UI', (
+    tester,
+  ) async {
+    // The config read sits between the submitting flag and the AI call. When
+    // it throws (settings storage failure), the old ordering leaked the raw
+    // exception past the screen's error handling and left submitting true
+    // forever — button and retry both dead until the user navigated away.
+    final ProviderContainer container = await _pumpCapture(
+      tester,
+      db: db,
+      keyStore: keyStore,
+      extraOverrides: <Override>[
+        aiSettingsConfigProvider.overrideWith(
+          (Ref ref) => Future<AiSettings>.error(StateError('db broken')),
+        ),
+      ],
+    );
+    await tester.enterText(find.byKey(const Key('capture_text_field')), '一碗米饭');
+
+    expect(
+      await container.read(captureControllerProvider.notifier).submit('一碗米饭'),
+      isNull,
+    );
+    final CaptureState state = container.read(captureControllerProvider);
+    expect(state.submitting, isFalse, reason: 'the flow must unwind');
+    expect(state.outcome, CaptureOutcome.failed);
+    expect(state.error, isA<Unknown>());
+    await tester.pump();
+    expect(find.byKey(captureErrorKey), findsOneWidget);
   });
 
   testWidgets('a 4th photo is rejected at the 3-photo cap', (tester) async {

@@ -238,10 +238,15 @@ class CaptureController extends Notifier<CaptureState> {
     // On a cold start the config FutureProvider may still be loading; reading
     // the client before it settles would silently fall back to the default
     // endpoint and send the user's key there. Same guard as
-    // saveAndTestConnection.
-    await ref.read(aiSettingsConfigProvider.future);
-    final AiClient client = ref.read(aiClientProvider);
+    // saveAndTestConnection. The await runs INSIDE the try: a config read
+    // that fails (settings storage error) is a failure of this submit and
+    // must land in the typed failure state — outside, it escaped the screen's
+    // error handling and left submitting true forever (button + retry both
+    // dead until the user navigated away).
+    final AiClient client;
     try {
+      await ref.read(aiSettingsConfigProvider.future);
+      client = ref.read(aiClientProvider);
       final PromptTemplate prompt = photos.isNotEmpty
           ? mealPhotoPrompt(
               photoCount: photos.length,
@@ -293,6 +298,16 @@ class CaptureController extends Notifier<CaptureState> {
         outcome: CaptureOutcome.failed,
         submitting: false,
         error: error,
+      );
+      return null;
+    } on Object catch (error) {
+      // A non-AI failure (the settings-config read above): funnel it into the
+      // typed failure state so the button and the retry stay alive.
+      mealTrace('capture.error', '${error.runtimeType}: $error');
+      state = state.copyWith(
+        outcome: CaptureOutcome.failed,
+        submitting: false,
+        error: const Unknown('settings config read failed'),
       );
       return null;
     }

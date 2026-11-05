@@ -1141,6 +1141,9 @@ class S {
   /// AI error: server error with [statusCode].
   String errorServer(Object statusCode) => '服务器错误（$statusCode）';
 
+  /// AI error: an unexpected failure outside the provider round-trip.
+  String get errorUnknown => '出错了，请重试';
+
   // ---------------------------------------------------------------------------
   // Offline / AI unavailable
   // ---------------------------------------------------------------------------

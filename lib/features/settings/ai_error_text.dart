@@ -18,4 +18,5 @@ String describeAiError(AiError error) => switch (error) {
   Network() => S.instance.errorNetwork,
   MalformedResponse() => S.instance.errorMalformedResponse,
   Server() => S.instance.errorServer(error.statusCode),
+  Unknown() => S.instance.errorUnknown,
 };

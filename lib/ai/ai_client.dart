@@ -151,6 +151,14 @@ final class Server extends AiError {
   final int statusCode;
 }
 
+/// An unexpected failure OUTSIDE the provider round-trip — e.g. the settings
+/// storage failing while the capture flow reads the config before the call.
+/// Never raised by [AiClient] itself; it exists so callers can funnel any
+/// non-AiError exception into the typed failure state.
+final class Unknown extends AiError {
+  const Unknown([super.detail]);
+}
+
 /// One part of a chat message: text, or an inline base64 image.
 ///
 /// Text-only and vision requests are the same message model with different

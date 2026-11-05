@@ -38,6 +38,8 @@ import 'package:caldoo/core/providers/app_providers.dart'
     show foodRepositoryProvider, mealRepositoryProvider;
 import 'package:caldoo/core/theme/app_dimensions.dart';
 import 'package:caldoo/core/time/date_windows.dart' show MealWithItems;
+import 'package:caldoo/domain/repositories/repositories.dart'
+    show MealRepository;
 import 'package:caldoo/core/ui/app_card.dart';
 import 'package:caldoo/core/units/display_units.dart';
 import 'package:caldoo/domain/models/models.dart';
@@ -218,15 +220,21 @@ class _SavedFoodDetailScreenState extends ConsumerState<SavedFoodDetailScreen> {
       food,
       affected,
     );
+    // Hoisted out of the loop: `ref.read` throws once the widget is unmounted,
+    // so a user tapping back mid-loop would abort the remaining writes and
+    // leave the history half-rewritten with no report. A repository port is
+    // state-safe to hold across awaits.
+    final MealRepository mealRepository = ref.read(mealRepositoryProvider);
     var recomputedCount = 0;
     for (var i = 0; i < recomputed.length; i++) {
       // Unchanged meals come back as the same instance — skip the rewrite.
       if (identical(recomputed[i], affected[i])) {
         continue;
       }
-      await ref
-          .read(mealRepositoryProvider)
-          .updateMealWithItems(recomputed[i].meal, recomputed[i].items);
+      await mealRepository.updateMealWithItems(
+        recomputed[i].meal,
+        recomputed[i].items,
+      );
       recomputedCount += recomputed[i].items
           .where((MealItem it) => it.foodId == food.id)
           .length;
