@@ -63,6 +63,45 @@ void main() {
     expect(find.text('150 g · 1464 kJ'), findsNothing);
   });
 
+  testWidgets('fractional grams render like the review card, not rounded', (
+    WidgetTester tester,
+  ) async {
+    // 74.5 g must stay 74.5 — the review card and the today screen show the
+    // shared AppFormat.number, and rounding the detail page up to 75 made the
+    // same meal read differently one screen later.
+    final Meal meal = summaryMeal(id: 'meal-frac', timestamp: fixedNow);
+    final FakeMealRepository repo = FakeMealRepository();
+    addTearDown(repo.dispose);
+    await repo.saveMealWithItems(meal, <MealItem>[
+      const MealItem(
+        id: 'item-frac',
+        name: '测试食物',
+        grams: 74.5,
+        kcal: 174,
+        carbG: 38.9,
+        proteinG: 3.6,
+        fatG: 0.3,
+        saltG: 0.0005,
+        source: FoodSource.ai,
+      ),
+    ]);
+    final Widget app = MaterialApp(home: MealDetailScreen(mealId: meal.id));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mealRepositoryProvider.overrideWithValue(repo),
+          summaryClockProvider.overrideWithValue(fixedShanghaiClock()),
+          localOffsetProvider.overrideWithValue(shanghai),
+        ],
+        child: app,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('74.5 g · 174 kcal'), findsOneWidget);
+    expect(find.text('75 g · 174 kcal'), findsNothing);
+  });
+
   testWidgets('a kJ preference converts only the energy half of the line', (
     WidgetTester tester,
   ) async {
