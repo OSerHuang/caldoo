@@ -396,6 +396,10 @@ class S {
   /// Day running totals block title.
   String get mealTotalsToday => '今日累计';
 
+  /// Day running totals block title on a meal detail opened from history (the
+  /// meal's own day, not the wall-clock one).
+  String get mealTotalsThatDay => '当日累计';
+
   // ---------------------------------------------------------------------------
   // Daily summary
   // ---------------------------------------------------------------------------

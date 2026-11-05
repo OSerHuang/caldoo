@@ -9,6 +9,7 @@
 /// salt/sodium basis; the default (no scope) rendering must stay kcal + salt.
 library;
 
+import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -88,6 +89,55 @@ void main() {
       'meal_salt=${_value(tester, mealSummarySaltKey)} '
       'day_total_salt=${_value(tester, dayTotalSaltKey)} -> PASS',
     );
+  });
+
+  testWidgets('a past-day meal shows ITS day total, not the wall-clock day', (
+    WidgetTester tester,
+  ) async {
+    final FakeMealRepository repo = FakeMealRepository();
+    addTearDown(repo.dispose);
+
+    // Monday's meal (fixedNow is 2026-01-05 12:00 +08) with a second meal on
+    // the same day, then Wednesday "today" with nothing logged. The card is
+    // opened for the MONDAY meal; the old hardwired 今日 stream would pair it
+    // with Wednesday's running intake (0 kcal) under the label 今日累计.
+    final Meal monday = summaryMeal(id: 'meal-mon', timestamp: fixedNow);
+    final Meal mondayBreakfast = summaryMeal(
+      id: 'meal-mon-b',
+      timestamp: fixedNow.subtract(const Duration(hours: 3)),
+      mealType: MealType.breakfast,
+    );
+    await repo.saveMealWithItems(monday, <MealItem>[summaryRiceItem()]);
+    await repo.saveMealWithItems(mondayBreakfast, <MealItem>[summaryEggItem()]);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mealRepositoryProvider.overrideWithValue(repo),
+          summaryClockProvider.overrideWithValue(
+            Clock.fixed(fixedNow.add(const Duration(days: 2))),
+          ),
+          localOffsetProvider.overrideWithValue(shanghai),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: MealSummaryCard(
+              meal: monday,
+              items: <MealItem>[summaryRiceItem()],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 本餐合计 is the meal; the day line is MONDAY's running intake (190),
+    // labelled 当日累计 — not Wednesday's 0 under 今日累计.
+    expect(_value(tester, mealSummaryKcalKey), '120');
+    expect(find.text('当日累计'), findsOneWidget);
+    expect(find.text('今日累计'), findsNothing);
+    expect(_value(tester, dayTotalKcalKey), '190');
+    expect(_value(tester, dayTotalSaltKey), '0.5');
   });
 
   testWidgets('the card names the recorded time under the meal type', (
