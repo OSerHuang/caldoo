@@ -16,6 +16,7 @@ import 'package:caldoo/features/settings/backup/auto_backup_data.dart';
 import 'package:caldoo/features/settings/backup/auto_backup_providers.dart'
     show autoBackupStatusProvider, autoBackupStorageProvider;
 import 'package:caldoo/features/settings/backup/auto_backup_storage.dart';
+import 'package:caldoo/features/settings/display_settings_providers.dart';
 import 'package:caldoo/features/settings/privacy/privacy_notice.dart';
 import 'package:caldoo/features/settings/settings_providers.dart';
 import 'package:caldoo/l10n/app_strings.dart';
@@ -129,6 +130,10 @@ class DeleteAllDataButton extends ConsumerWidget {
     ref.invalidate(privacyNoticeSeenProvider);
     ref.invalidate(settingsControllerProvider);
     ref.invalidate(aiSettingsConfigProvider);
+    // The wipe also deleted the display-unit rows; without this the session
+    // keeps rendering the pre-wipe unit for rows that no longer exist, until
+    // the next launch silently reverts it.
+    ref.invalidate(displaySettingsProvider);
     // The backup folder is empty now; the backup screen must not show the
     // deleted documents until it re-lists.
     ref.invalidate(autoBackupStatusProvider);
