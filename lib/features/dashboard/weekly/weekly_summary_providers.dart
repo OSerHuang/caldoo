@@ -207,7 +207,15 @@ final weeklySummaryForWeekProvider =
           (profile.isLoading && !profile.hasValue) ||
           (meals.isLoading && !meals.hasValue) ||
           (exercises.isLoading && !exercises.hasValue);
-      if (stillLoading) {
+      // An ERRORED stream must not fall through to a zero week (its `.value`
+      // is null, so the totals would claim 摄入 0) — stay on the loading state
+      // like the daily card does.
+      final bool unavailable =
+          stillLoading ||
+          profile.hasError ||
+          meals.hasError ||
+          exercises.hasError;
+      if (unavailable) {
         return const WeeklySummaryLoading();
       }
       // The weight stream deliberately does NOT gate the loading state: while
