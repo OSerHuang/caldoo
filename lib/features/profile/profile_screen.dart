@@ -23,6 +23,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:caldoo/core/math/energy_balance.dart';
 import 'package:caldoo/core/providers/app_providers.dart';
+import 'package:caldoo/core/ui/shell_insets.dart';
 import 'package:caldoo/core/units/display_units.dart';
 import 'package:caldoo/domain/models/user_profile.dart';
 import 'package:caldoo/l10n/app_format.dart';
@@ -361,7 +362,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Widget _buildForm(BuildContext context, EnergyBudgetResult? budget) {
     final int? age = _currentAge();
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: withShellBottom(context, const EdgeInsets.all(16)),
       children: <Widget>[
         Text(S.of(context).sexLabel),
         const SizedBox(height: 8),

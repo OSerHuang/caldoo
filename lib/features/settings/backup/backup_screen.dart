@@ -19,6 +19,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:caldoo/core/ui/shell_insets.dart';
 import 'package:caldoo/l10n/app_format.dart';
 import 'package:caldoo/l10n/app_strings.dart';
 import 'package:caldoo/features/settings/display_settings_providers.dart';
@@ -322,7 +323,7 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
       key: backupScreenKey,
       appBar: AppBar(title: Text(strings.backupTitle)),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: withShellBottom(context, const EdgeInsets.all(16)),
         children: <Widget>[
           Text(strings.backupIntro),
           const SizedBox(height: 24),

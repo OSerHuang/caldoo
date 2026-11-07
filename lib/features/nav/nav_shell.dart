@@ -3,7 +3,7 @@
 /// `StatefulShellRoute.indexedStack` (go_router 18) gives each branch its own
 /// [Navigator] inside an [IndexedStack], so switching tabs never rebuilds the
 /// other branches and every tab keeps its own navigation stack and widget
-/// state. This widget only renders the [NavigationBar]; the branch navigators
+/// state. This widget only renders the [GlassNavBar]; the branch navigators
 /// themselves are owned by go_router.
 library;
 
@@ -11,6 +11,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:caldoo/l10n/app_strings.dart';
+
+import 'glass_nav_bar.dart';
 
 /// Keys for the three bottom-nav destinations (stable widget-test hooks).
 ///
@@ -23,7 +25,7 @@ const Key navTodayKey = Key('nav_today');
 const Key navFoodsKey = Key('nav_foods');
 const Key navProfileKey = Key('nav_profile');
 
-/// The Material 3 bottom navigation bar over the active branch.
+/// The glass bottom navigation over the active branch.
 class NavShell extends StatelessWidget {
   /// Creates the shell over the go_router [navigationShell].
   const NavShell({required this.navigationShell, super.key});
@@ -35,7 +37,11 @@ class NavShell extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: navigationShell,
-      bottomNavigationBar: NavigationBar(
+      // The glass bar floats over the branch content, so scrolling lists pass
+      // beneath the blur. Scrollables inside the shell add the bar's height
+      // (MediaQuery bottom padding) to their own insets to stay clear.
+      extendBody: true,
+      bottomNavigationBar: GlassNavBar(
         selectedIndex: navigationShell.currentIndex,
         onDestinationSelected: (int index) {
           // `initialLocation` only when re-tapping the active tab, so a normal
@@ -46,23 +52,23 @@ class NavShell extends StatelessWidget {
             initialLocation: index == navigationShell.currentIndex,
           );
         },
-        destinations: <NavigationDestination>[
-          NavigationDestination(
+        destinations: <GlassNavDestination>[
+          GlassNavDestination(
             key: navTodayKey,
-            icon: const Icon(Icons.dashboard_outlined),
-            selectedIcon: const Icon(Icons.dashboard),
+            icon: Icons.dashboard_outlined,
+            selectedIcon: Icons.dashboard,
             label: S.of(context).navOverview,
           ),
-          NavigationDestination(
+          GlassNavDestination(
             key: navFoodsKey,
-            icon: const Icon(Icons.local_offer_outlined),
-            selectedIcon: const Icon(Icons.local_offer),
+            icon: Icons.local_offer_outlined,
+            selectedIcon: Icons.local_offer,
             label: S.of(context).navFoods,
           ),
-          NavigationDestination(
+          GlassNavDestination(
             key: navProfileKey,
-            icon: const Icon(Icons.person_outline),
-            selectedIcon: const Icon(Icons.person),
+            icon: Icons.person_outline,
+            selectedIcon: Icons.person,
             label: S.of(context).navProfile,
           ),
         ],

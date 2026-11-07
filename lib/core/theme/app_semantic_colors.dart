@@ -21,6 +21,7 @@ class AppSemantics extends ThemeExtension<AppSemantics> {
     required this.fat,
     required this.salt,
     required this.exercise,
+    required this.surplusHeat,
     required this.chartTarget,
   });
 
@@ -48,6 +49,10 @@ class AppSemantics extends ThemeExtension<AppSemantics> {
   /// 运动消耗 — teal.
   final Color exercise;
 
+  /// The ring-gradient tip for a 盈余 day: the warning red flowing into heat
+  /// amber (paired with [surplus] by the daily summary).
+  final Color surplusHeat;
+
   /// Weekly-chart budget line — the warning red, by convention.
   final Color chartTarget;
 
@@ -61,6 +66,7 @@ class AppSemantics extends ThemeExtension<AppSemantics> {
     fat: Color(0xFF7C3AED),
     salt: Color(0xFFDB2777),
     exercise: Color(0xFF0F766E),
+    surplusHeat: Color(0xFFF97316),
     chartTarget: Color(0xFFDC2626),
   );
 
@@ -74,6 +80,7 @@ class AppSemantics extends ThemeExtension<AppSemantics> {
     fat: Color(0xFFA78BFA),
     salt: Color(0xFFF472B6),
     exercise: Color(0xFF2DD4BF),
+    surplusHeat: Color(0xFFFBBF24),
     chartTarget: Color(0xFFF87171),
   );
 
@@ -93,6 +100,7 @@ class AppSemantics extends ThemeExtension<AppSemantics> {
     Color? fat,
     Color? salt,
     Color? exercise,
+    Color? surplusHeat,
     Color? chartTarget,
   }) => AppSemantics(
     deficit: deficit ?? this.deficit,
@@ -103,6 +111,7 @@ class AppSemantics extends ThemeExtension<AppSemantics> {
     fat: fat ?? this.fat,
     salt: salt ?? this.salt,
     exercise: exercise ?? this.exercise,
+    surplusHeat: surplusHeat ?? this.surplusHeat,
     chartTarget: chartTarget ?? this.chartTarget,
   );
 
@@ -120,6 +129,7 @@ class AppSemantics extends ThemeExtension<AppSemantics> {
       fat: Color.lerp(fat, other.fat, t)!,
       salt: Color.lerp(salt, other.salt, t)!,
       exercise: Color.lerp(exercise, other.exercise, t)!,
+      surplusHeat: Color.lerp(surplusHeat, other.surplusHeat, t)!,
       chartTarget: Color.lerp(chartTarget, other.chartTarget, t)!,
     );
   }

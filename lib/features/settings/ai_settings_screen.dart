@@ -9,6 +9,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:caldoo/core/ui/shell_insets.dart';
 import 'package:caldoo/features/settings/ai_error_text.dart';
 import 'package:caldoo/features/settings/settings_providers.dart';
 import 'package:caldoo/l10n/app_strings.dart';
@@ -92,7 +93,7 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
       _seeded = true;
     }
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: withShellBottom(context, const EdgeInsets.all(16)),
       children: <Widget>[
         TextField(
           key: const Key('settings_api_key_field'),

@@ -24,6 +24,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:caldoo/core/time/date_windows.dart';
 import 'package:caldoo/core/ui/app_card.dart';
+import 'package:caldoo/core/ui/shell_insets.dart';
 import 'package:caldoo/l10n/app_format.dart';
 import 'package:caldoo/l10n/app_strings.dart';
 
@@ -173,7 +174,7 @@ class _ExerciseEntryScreenState extends ConsumerState<ExerciseEntryScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(strings.exerciseTitle)),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: withShellBottom(context, const EdgeInsets.all(16)),
         children: <Widget>[
           _DayCard(
             day: day,

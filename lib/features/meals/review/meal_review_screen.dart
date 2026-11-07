@@ -56,6 +56,7 @@ import 'package:caldoo/ai/schemas/label_link.dart'
 import 'package:caldoo/ai/schemas/meal_analysis.dart' show MealAnalysis;
 import 'package:caldoo/core/logging/meal_trace.dart';
 import 'package:caldoo/core/providers/app_providers.dart';
+import 'package:caldoo/core/ui/shell_insets.dart';
 import 'package:caldoo/core/time/date_windows.dart'
     show LocalOffset, instantFromWallClock, localDateOfKey, wallClockOf;
 import 'package:caldoo/core/units/display_units.dart';
@@ -925,7 +926,10 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(S.of(context).reviewTitle)),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        // extendBody: the shell's glass nav floats over this screen, so the
+        // save button (the column's last child) must clear the injected bar
+        // height when scrolled to the end.
+        padding: withShellBottom(context, const EdgeInsets.all(16)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[

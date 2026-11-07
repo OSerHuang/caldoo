@@ -60,6 +60,7 @@ import 'package:caldoo/core/time/date_windows.dart';
 import 'package:caldoo/core/ui/app_card.dart';
 import 'package:caldoo/core/ui/history_period_pager.dart';
 import 'package:caldoo/core/ui/section_header.dart';
+import 'package:caldoo/core/ui/shell_insets.dart';
 import 'package:caldoo/core/ui/value_unit_text.dart';
 import 'package:caldoo/core/units/display_units.dart';
 import 'package:caldoo/domain/models/models.dart';
@@ -243,7 +244,12 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
         return SingleChildScrollView(
           // Same page padding as the day and month views, so switching views
           // never shifts the card sideways or up.
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          // extendBody: the helper adds the glass nav's injected height so
+          // the tail scrolls clear.
+          padding: withShellBottom(
+            context,
+            const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          ),
           child: WeeklySummaryView(
             weekMonday: monday,
             isCurrentWeek: offset == 0,
@@ -269,7 +275,14 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
       periodBuilder: (BuildContext context, int offset) {
         final DateTime monthKey = monthKeyAfter(currentMonth, -offset);
         return SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          // extendBody: the glass nav floats over this page — add the bar
+          // height the shell injects so the tail scrolls clear.
+          padding: EdgeInsets.fromLTRB(
+            16,
+            8,
+            16,
+            24 + MediaQuery.paddingOf(context).bottom,
+          ),
           child: MonthlySummaryView(
             monthKey: monthKey,
             isCurrentMonth: offset == 0,
@@ -385,7 +398,12 @@ class _DayPageBody extends ConsumerWidget {
     );
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      // extendBody: the helper adds the glass nav's injected height so the
+      // tail scrolls clear.
+      padding: withShellBottom(
+        context,
+        const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      ),
       children: <Widget>[
         DailySummaryView(dayKey: dayKey, isToday: isToday),
         const SizedBox(height: 16),
