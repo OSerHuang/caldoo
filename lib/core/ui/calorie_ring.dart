@@ -8,6 +8,11 @@ import '../theme/app_dimensions.dart';
 
 /// The ring. [progress] is `intake / budget` clamped to `0..1` for drawing;
 /// the centre [child] is laid out in a fixed [size] box.
+///
+/// With [gradientEndColor] the sweep runs as a gradient from [color] into
+/// that accent (the gradient spans exactly the drawn arc, so the tip always
+/// lands on the accent regardless of progress) and the arc gets a soft outer
+/// glow. Without it the ring stays the flat solid stroke.
 class CalorieRing extends StatelessWidget {
   /// Creates the ring.
   const CalorieRing({
@@ -17,6 +22,7 @@ class CalorieRing extends StatelessWidget {
     this.size = 176,
     this.strokeWidth = AppDim.ringStroke,
     this.color,
+    this.gradientEndColor,
     this.trackColor,
   });
 
@@ -35,6 +41,9 @@ class CalorieRing extends StatelessWidget {
   /// Fill colour; defaults to `colorScheme.primary`.
   final Color? color;
 
+  /// Gradient tip colour; `null` renders the flat solid stroke.
+  final Color? gradientEndColor;
+
   /// Track colour; defaults to `colorScheme.surfaceContainerHighest`.
   final Color? trackColor;
 
@@ -52,6 +61,7 @@ class CalorieRing extends StatelessWidget {
           progress: t,
           strokeWidth: strokeWidth,
           color: color ?? colors.primary,
+          gradientEndColor: gradientEndColor,
           trackColor: trackColor ?? colors.surfaceContainerHighest,
         ),
         child: SizedBox(
@@ -69,13 +79,18 @@ class _RingPainter extends CustomPainter {
     required this.progress,
     required this.strokeWidth,
     required this.color,
+    required this.gradientEndColor,
     required this.trackColor,
   });
 
   final double progress;
   final double strokeWidth;
   final Color color;
+  final Color? gradientEndColor;
   final Color trackColor;
+
+  /// The arc's start angle: 12 o'clock, sweeping clockwise.
+  static const double _startAngle = -3.141592653589793 / 2;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -89,21 +104,69 @@ class _RingPainter extends CustomPainter {
       ..color = trackColor;
     canvas.drawCircle(center, radius, track);
 
-    final Paint fill = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round
-      ..color = color;
     final double sweep = 2 * 3.141592653589793 * progress;
-    if (sweep > 0) {
-      canvas.drawArc(rect, -3.141592653589793 / 2, sweep, false, fill);
+    if (sweep <= 0) {
+      return;
     }
+
+    if (gradientEndColor == null) {
+      canvas.drawArc(rect, _startAngle, sweep, false, _fillPaint(rect));
+      return;
+    }
+
+    // Soft glow underlay: a wider, blurred pass of the same arc in the
+    // gradient's start colour — kept faint, because at a clamped 100% sweep
+    // (盈余日) a stronger halo reads as a coloured blob rather than light.
+    canvas.drawArc(
+      rect,
+      _startAngle,
+      sweep,
+      false,
+      _fillPaint(
+        rect,
+        overrideColor: color.withValues(alpha: 0.22),
+        widthFactor: 1.5,
+        blurSigma: strokeWidth * 0.45,
+      ),
+    );
+    canvas.drawArc(rect, _startAngle, sweep, false, _fillPaint(rect));
+  }
+
+  Paint _fillPaint(
+    Rect rect, {
+    Color? overrideColor,
+    double widthFactor = 1,
+    double blurSigma = 0,
+  }) {
+    final Paint paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth * widthFactor
+      ..strokeCap = StrokeCap.round;
+    final Color? endColor = gradientEndColor;
+    if (overrideColor != null) {
+      paint.color = overrideColor;
+    } else if (endColor != null) {
+      // The gradient spans exactly the drawn sweep, so the arc tip always
+      // lands on the accent colour whatever the progress.
+      paint.shader = SweepGradient(
+        startAngle: _startAngle,
+        endAngle: _startAngle + 2 * 3.141592653589793 * progress,
+        colors: <Color>[color, endColor],
+      ).createShader(rect);
+    } else {
+      paint.color = color;
+    }
+    if (blurSigma > 0) {
+      paint.maskFilter = MaskFilter.blur(BlurStyle.normal, blurSigma);
+    }
+    return paint;
   }
 
   @override
   bool shouldRepaint(_RingPainter oldDelegate) =>
       oldDelegate.progress != progress ||
       oldDelegate.color != color ||
+      oldDelegate.gradientEndColor != gradientEndColor ||
       oldDelegate.trackColor != trackColor ||
       oldDelegate.strokeWidth != strokeWidth;
 }

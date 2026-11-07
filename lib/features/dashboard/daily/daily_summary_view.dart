@@ -89,6 +89,16 @@ Color dailyBalanceColor(BalanceKind kind) => switch (kind) {
   BalanceKind.balanced => dailyBalancedColor,
 };
 
+/// The ring-gradient tip for a [BalanceKind]: 缺口 green flows into the teal
+/// exercise accent, 盈余 red into heat amber, 平衡 keeps the flat stroke.
+/// `null` renders CalorieRing's solid colour.
+Color? dailyRingGradientTip(BuildContext context, BalanceKind kind) =>
+    switch (kind) {
+      BalanceKind.deficit => AppSemantics.of(context).exercise,
+      BalanceKind.surplus => AppSemantics.of(context).surplusHeat,
+      BalanceKind.balanced => null,
+    };
+
 /// The brightness-aware balance colour (falls back to the light palette when
 /// no [AppSemantics] extension is installed).
 Color _balanceColor(BuildContext context, BalanceKind kind) {
@@ -186,6 +196,11 @@ class _SummaryCard extends StatelessWidget {
     final Color ringColor = balance == null
         ? theme.colorScheme.primary
         : _balanceColor(context, balance.kind);
+    // No budget → no signed balance → the flat primary stroke (a deficit is
+    // never shown without a budget).
+    final Color? ringTip = balance == null
+        ? null
+        : dailyRingGradientTip(context, balance.kind);
     final double ringProgress = budget == null || budget.budgetKcal <= 0
         ? 0
         : (rollup.intakeKcal / budget.budgetKcal).clamp(0.0, 1.0);
@@ -218,6 +233,7 @@ class _SummaryCard extends StatelessWidget {
               CalorieRing(
                 progress: ringProgress,
                 color: ringColor,
+                gradientEndColor: ringTip,
                 size: 150,
                 strokeWidth: 12,
                 child: _RingCenter(
@@ -238,14 +254,17 @@ class _SummaryCard extends StatelessWidget {
                         style: theme.textTheme.labelMedium,
                       ),
                       const SizedBox(height: 2),
-                      ValueUnitText(
-                        units.energyValueText(rollup.intakeKcal),
-                        units.energyUnit,
-                        valueKey: dailyIntakeKcalKey,
-                        valueStyle: theme.textTheme.headlineSmall!.copyWith(
-                          fontFeatures: const <FontFeature>[
-                            FontFeature.tabularFigures(),
-                          ],
+                      _CountUp(
+                        value: rollup.intakeKcal,
+                        builder: (BuildContext context, int v) => ValueUnitText(
+                          units.energyValueText(v),
+                          units.energyUnit,
+                          valueKey: dailyIntakeKcalKey,
+                          valueStyle: theme.textTheme.headlineSmall!.copyWith(
+                            fontFeatures: const <FontFeature>[
+                              FontFeature.tabularFigures(),
+                            ],
+                          ),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -380,10 +399,13 @@ class _RingCenter extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           Text(S.of(context).labelEnergy, style: theme.textTheme.labelSmall),
-          Text(
-            units.energyValueText(rollup.intakeKcal),
-            key: dailyIntakeKcalKey,
-            style: bigValue.copyWith(fontSize: 24),
+          _CountUp(
+            value: rollup.intakeKcal,
+            builder: (BuildContext context, int v) => Text(
+              units.energyValueText(v),
+              key: dailyIntakeKcalKey,
+              style: bigValue.copyWith(fontSize: 24),
+            ),
           ),
           Text(units.energyUnit, style: theme.textTheme.labelSmall),
         ],
@@ -401,10 +423,13 @@ class _RingCenter extends StatelessWidget {
             fontWeight: FontWeight.w700,
           ),
         ),
-        Text(
-          units.energyValueText(balance.valueKcal),
-          key: dailyBalanceValueKey,
-          style: bigValue.copyWith(color: color),
+        _CountUp(
+          value: balance.valueKcal,
+          builder: (BuildContext context, int v) => Text(
+            units.energyValueText(v),
+            key: dailyBalanceValueKey,
+            style: bigValue.copyWith(color: color),
+          ),
         ),
         Text(units.energyUnit, style: theme.textTheme.labelSmall),
       ],
@@ -444,6 +469,32 @@ class _SideStat extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The count-up wrapper for the hero's headline numbers: animates 0 → value
+/// on first appearance and eases from the old to the new value when the
+/// day's data changes. Honours the platform reduced-motion setting.
+class _CountUp extends StatelessWidget {
+  const _CountUp({required this.value, required this.builder});
+
+  /// The settled value; also the tween's end.
+  final int value;
+
+  /// Builds the display for an intermediate (or settled) value.
+  final Widget Function(BuildContext context, int value) builder;
+
+  @override
+  Widget build(BuildContext context) {
+    if (MediaQuery.disableAnimationsOf(context)) {
+      return builder(context, value);
+    }
+    return TweenAnimationBuilder<int>(
+      tween: IntTween(begin: 0, end: value),
+      duration: const Duration(milliseconds: 900),
+      curve: Curves.easeOutCubic,
+      builder: (BuildContext context, int v, Widget? _) => builder(context, v),
     );
   }
 }

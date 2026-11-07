@@ -18,6 +18,7 @@ import 'package:caldoo/core/providers/app_providers.dart'
     show foodRepositoryProvider;
 import 'package:caldoo/core/theme/app_dimensions.dart';
 import 'package:caldoo/core/ui/app_card.dart';
+import 'package:caldoo/core/ui/shell_insets.dart';
 import 'package:caldoo/domain/models/models.dart';
 import 'package:caldoo/domain/services/label_priority.dart'
     show foodAliases, foodServings, parseFoodServings;
@@ -232,7 +233,10 @@ class _SavedFoodNotesScreenState extends ConsumerState<SavedFoodNotesScreen> {
       key: savedFoodNotesScreenKey,
       appBar: AppBar(title: Text(S.of(context).foodEditTitle)),
       body: ListView(
-        padding: const EdgeInsets.all(AppDim.pagePadding),
+        padding: withShellBottom(
+          context,
+          const EdgeInsets.all(AppDim.pagePadding),
+        ),
         children: <Widget>[
           AppCard(
             child: Column(

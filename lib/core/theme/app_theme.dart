@@ -49,7 +49,6 @@ final ThemeData lightTheme = _buildTheme(
   ),
   scaffold: const Color(0xFFF6F7F9),
   inputFill: const Color(0xFFEFF1F4),
-  navBarSurface: const Color(0xFFFFFFFF),
 );
 
 /// The dark theme.
@@ -88,7 +87,6 @@ final ThemeData darkTheme = _buildTheme(
   ),
   scaffold: const Color(0xFF0E1013),
   inputFill: const Color(0xFF21252C),
-  navBarSurface: const Color(0xFF111318),
 );
 
 ThemeData _buildTheme({
@@ -96,7 +94,6 @@ ThemeData _buildTheme({
   required ColorScheme scheme,
   required Color scaffold,
   required Color inputFill,
-  required Color navBarSurface,
 }) {
   final bool isLight = brightness == Brightness.light;
 
@@ -225,21 +222,6 @@ ThemeData _buildTheme({
       focusedBorder: _inputBorder(scheme.primary, width: 1.6),
       errorBorder: _inputBorder(scheme.error),
       focusedErrorBorder: _inputBorder(scheme.error, width: 1.6),
-    ),
-    navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: navBarSurface,
-      indicatorColor: scheme.primaryContainer,
-      elevation: 0,
-      height: 68,
-      labelTextStyle: WidgetStatePropertyAll<TextStyle>(
-        textTheme.labelSmall!.copyWith(
-          fontWeight: FontWeight.w500,
-          color: scheme.onSurfaceVariant,
-        ),
-      ),
-      iconTheme: WidgetStatePropertyAll<IconThemeData>(
-        IconThemeData(color: scheme.onSurfaceVariant),
-      ),
     ),
     dividerTheme: DividerThemeData(
       color: scheme.outlineVariant,

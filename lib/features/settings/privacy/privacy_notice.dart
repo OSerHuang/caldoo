@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:caldoo/core/providers/app_providers.dart';
+import 'package:caldoo/core/ui/shell_insets.dart';
 import 'package:caldoo/data/settings/app_settings_store.dart';
 import 'package:caldoo/l10n/app_strings.dart';
 
@@ -61,7 +62,7 @@ class PrivacyNoticeScreen extends StatelessWidget {
       key: const Key('privacy_notice_screen'),
       appBar: AppBar(title: Text(S.of(context).privacyTitle)),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: withShellBottom(context, const EdgeInsets.all(16)),
         children: <Widget>[
           Text(
             S.of(context).privacyIntro,

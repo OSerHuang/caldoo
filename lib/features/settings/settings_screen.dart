@@ -10,6 +10,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:caldoo/core/ui/shell_insets.dart';
 import 'package:caldoo/l10n/app_strings.dart';
 
 /// Key of the 设置 hub scaffold.
@@ -32,7 +33,10 @@ class SettingsScreen extends StatelessWidget {
       key: settingsHubScreenKey,
       appBar: AppBar(title: Text(S.of(context).settingsTitle)),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        padding: withShellBottom(
+          context,
+          const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        ),
         children: <Widget>[
           Card(
             margin: EdgeInsets.zero,

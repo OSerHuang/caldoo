@@ -10,6 +10,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:caldoo/core/ui/shell_insets.dart';
 import 'package:caldoo/features/settings/privacy/delete_all_data.dart';
 import 'package:caldoo/l10n/app_strings.dart';
 
@@ -40,7 +41,12 @@ class ProfileTabScreen extends StatelessWidget {
         key: profileTabScreenKey,
         appBar: AppBar(title: Text(S.of(context).profileTabTitle)),
         body: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          // extendBody: the helper adds the glass nav's injected height so the tail
+          // scrolls clear.
+          padding: withShellBottom(
+            context,
+            const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          ),
           children: <Widget>[
             Card(
               margin: EdgeInsets.zero,

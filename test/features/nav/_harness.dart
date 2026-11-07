@@ -34,6 +34,7 @@ import 'package:caldoo/features/settings/ai_settings.dart' show SecureKeyStore;
 import 'package:caldoo/features/settings/privacy/privacy_notice.dart';
 import 'package:caldoo/features/settings/settings_providers.dart'
     show dioProvider, secureKeyStoreProvider;
+import 'package:caldoo/features/nav/glass_nav_bar.dart';
 import 'package:caldoo/features/nav/today_screen.dart';
 import 'package:caldoo/main.dart';
 
@@ -191,9 +192,9 @@ class NavTestEnv {
   );
 }
 
-/// The active [NavigationBar] tab index.
+/// The active [GlassNavBar] tab index.
 int selectedTab(WidgetTester tester) =>
-    tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex;
+    tester.widget<GlassNavBar>(find.byType(GlassNavBar)).selectedIndex;
 
 /// Scrolls the 今日 day view until [finder] is on stage.
 ///
@@ -213,6 +214,24 @@ Future<void> scrollTodayUntilVisible(WidgetTester tester, Finder finder) async {
         .first,
   );
   await tester.pumpAndSettle();
+  // extendBody: the glass nav floats over the list, so a merely-rendered row
+  // can still sit beneath it — keep scrolling until it is actually tappable.
+  for (int i = 0; i < 50; i++) {
+    if (tester.any(finder.hitTestable())) {
+      return;
+    }
+    await tester.drag(
+      find
+          .byWidgetPredicate(
+            (Widget widget) =>
+                widget is Scrollable &&
+                widget.axisDirection == AxisDirection.down,
+          )
+          .first,
+      const Offset(0, -120),
+    );
+    await tester.pumpAndSettle();
+  }
 }
 
 /// Opens the meal-capture screen from 今日's 记录一餐 quick-add action.

@@ -13,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:caldoo/core/theme/app_dimensions.dart';
 import 'package:caldoo/core/theme/app_semantic_colors.dart';
+import 'package:caldoo/core/ui/shell_insets.dart';
 import 'package:caldoo/domain/models/weight_entry.dart';
 import 'package:caldoo/features/dashboard/daily/daily_summary_providers.dart'
     show dashboardTodayKeyProvider;
@@ -103,7 +104,10 @@ class _WeightTrendScreenState extends ConsumerState<WeightTrendScreen> {
           final double? delta7d = deltaOverDays(data, todayKey, 7);
           final double deltaAll = latest.weightKg - data.first.weightKg;
           return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+            padding: withShellBottom(
+              context,
+              const EdgeInsets.fromLTRB(16, 8, 16, 24),
+            ),
             children: <Widget>[
               _StatsRow(
                 latestKg: latest.weightKg,

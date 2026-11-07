@@ -11,6 +11,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:caldoo/core/ui/shell_insets.dart';
 import 'package:caldoo/core/units/display_units.dart';
 import 'package:caldoo/features/settings/display_settings.dart';
 import 'package:caldoo/features/settings/display_settings_providers.dart';
@@ -50,7 +51,7 @@ class DisplaySettingsScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: Text(S.of(context).settingsSectionDisplay)),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: withShellBottom(context, const EdgeInsets.all(16)),
         children: <Widget>[
           Text(
             S.of(context).displayEnergyTitle,

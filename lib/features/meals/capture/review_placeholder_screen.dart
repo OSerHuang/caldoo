@@ -13,6 +13,7 @@ library;
 import 'package:flutter/material.dart';
 
 import 'package:caldoo/ai/schemas/meal_analysis.dart';
+import 'package:caldoo/core/ui/shell_insets.dart';
 import 'package:caldoo/l10n/app_strings.dart';
 
 class MealReviewPlaceholderScreen extends StatelessWidget {
@@ -26,7 +27,7 @@ class MealReviewPlaceholderScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: Text(S.of(context).reviewPlaceholderTitle)),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: withShellBottom(context, const EdgeInsets.all(16)),
         children: <Widget>[
           Text(
             S.of(context).reviewAiBanner,

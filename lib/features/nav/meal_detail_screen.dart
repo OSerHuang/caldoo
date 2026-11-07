@@ -18,6 +18,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:caldoo/core/providers/app_providers.dart';
 import 'package:caldoo/core/time/date_windows.dart';
+import 'package:caldoo/core/ui/shell_insets.dart';
 import 'package:caldoo/core/units/display_units.dart';
 import 'package:caldoo/domain/models/models.dart';
 import 'package:caldoo/features/meals/summary/meal_summary_card.dart';
@@ -158,7 +159,7 @@ class MealDetailScreen extends ConsumerWidget {
             );
           }
           return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
+            padding: withShellBottom(context, const EdgeInsets.all(16)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[

@@ -21,6 +21,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:caldoo/core/ui/shell_insets.dart';
 import 'package:caldoo/domain/models/models.dart';
 import 'package:caldoo/l10n/app_strings.dart';
 
@@ -67,16 +68,24 @@ class FoodLibraryScreen extends StatelessWidget {
         appBar: AppBar(title: Text(S.of(context).foodLibraryTitle)),
         body: SavedFoodList(
           onFoodTap: (Food food) => SavedFoodDetailScreen.push(context, food),
-          // Clear the extended FAB: on a long catalogue the last row would
-          // otherwise sit underneath it.
-          listBottomInset: 88,
+          // Clear the extended FAB and the glass nav (extendBody): on a long
+          // catalogue the last row would otherwise sit underneath either.
+          listBottomInset: 88 + MediaQuery.paddingOf(context).bottom,
           emptyState: _EmptyLibrary(onAdd: () => _openAddSheet(context)),
         ),
-        floatingActionButton: FloatingActionButton.extended(
-          key: foodLibraryAddButtonKey,
-          onPressed: () => _openAddSheet(context),
-          icon: const Icon(Icons.add),
-          label: Text(S.of(context).foodLibraryAdd),
+        // The shell's glass nav floats over this screen (extendBody), and a
+        // FAB is positioned by the Scaffold's own layout, which never reads
+        // MediaQuery padding — lift it above the injected bar height by hand.
+        floatingActionButton: Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.paddingOf(context).bottom,
+          ),
+          child: FloatingActionButton.extended(
+            key: foodLibraryAddButtonKey,
+            onPressed: () => _openAddSheet(context),
+            icon: const Icon(Icons.add),
+            label: Text(S.of(context).foodLibraryAdd),
+          ),
         ),
       ),
     );
@@ -170,7 +179,7 @@ class _EmptyLibrary extends StatelessWidget {
     final S strings = S.of(context);
     return Center(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        padding: withShellBottom(context, const EdgeInsets.all(24)),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[

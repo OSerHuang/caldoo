@@ -41,6 +41,7 @@ import 'package:caldoo/core/time/date_windows.dart' show MealWithItems;
 import 'package:caldoo/domain/repositories/repositories.dart'
     show MealRepository;
 import 'package:caldoo/core/ui/app_card.dart';
+import 'package:caldoo/core/ui/shell_insets.dart';
 import 'package:caldoo/core/units/display_units.dart';
 import 'package:caldoo/domain/models/models.dart';
 import 'package:caldoo/domain/services/food_history.dart'
@@ -343,7 +344,10 @@ class _SavedFoodDetailScreenState extends ConsumerState<SavedFoodDetailScreen> {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(AppDim.pagePadding),
+        padding: withShellBottom(
+          context,
+          const EdgeInsets.all(AppDim.pagePadding),
+        ),
         children: <Widget>[
           AppCard(
             child: Row(

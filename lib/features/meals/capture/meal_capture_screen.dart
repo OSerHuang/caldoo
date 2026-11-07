@@ -14,6 +14,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:caldoo/core/providers/app_providers.dart'
     show isOfflineProvider;
+import 'package:caldoo/core/ui/shell_insets.dart';
 import 'package:caldoo/features/offline/offline_ui.dart';
 import 'package:caldoo/l10n/app_strings.dart';
 
@@ -114,7 +115,7 @@ class _MealCaptureScreenState extends ConsumerState<MealCaptureScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(S.of(context).captureMealTitle)),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: withShellBottom(context, const EdgeInsets.all(16)),
         children: <Widget>[
           TextField(
             key: const Key('capture_text_field'),
