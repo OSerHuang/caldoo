@@ -38,6 +38,7 @@ import 'package:caldoo/features/meals/review/meal_review_screen.dart';
 import 'package:caldoo/features/meals/summary/meal_summary_providers.dart'
     show localOffsetProvider;
 import 'package:caldoo/features/meals/saved_foods/food_library_screen.dart';
+import 'package:caldoo/features/meals/templates/template_library_screen.dart';
 import 'package:caldoo/features/nav/meal_detail_screen.dart';
 import 'package:caldoo/features/nav/nav_shell.dart';
 import 'package:caldoo/features/nav/profile_tab_screen.dart';
@@ -145,6 +146,13 @@ StatefulShellRoute _shellRoute() {
                 path: 'details',
                 builder: (BuildContext context, GoRouterState state) =>
                     const ProfileScreen(),
+              ),
+              // The meal-template library: the 我的-tab management surface for
+              // the templates saved from meal-detail pages.
+              GoRoute(
+                path: 'templates',
+                builder: (BuildContext context, GoRouterState state) =>
+                    const TemplateLibraryScreen(),
               ),
               // 设置 is a hub: the model form and the display preferences are
               // second-level pages, so the hub stays a plain two-row menu.

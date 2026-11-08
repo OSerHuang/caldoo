@@ -7,14 +7,17 @@
 /// through the watch stream.
 ///
 /// The app bar carries the catalogue-style maintenance actions: 编辑 pushes
-/// `/meal/:id/edit` (the saved meal reopened in the review form) and 删除
-/// removes the whole meal behind a confirm dialog. The summary streams are all
+/// `/meal/:id/edit` (the saved meal reopened in the review form), 存为模版
+/// snapshots the meal into a reusable template, and 删除 removes the whole
+/// meal behind a confirm dialog. The summary streams are all
 /// watch-based, so both actions update every total by themselves.
 library;
 
+import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:uuid/uuid.dart';
 
 import 'package:caldoo/core/providers/app_providers.dart';
 import 'package:caldoo/core/time/date_windows.dart';
@@ -22,6 +25,7 @@ import 'package:caldoo/core/ui/shell_insets.dart';
 import 'package:caldoo/core/units/display_units.dart';
 import 'package:caldoo/domain/models/models.dart';
 import 'package:caldoo/features/meals/summary/meal_summary_card.dart';
+import 'package:caldoo/features/meals/templates/save_template_sheet.dart';
 import 'package:caldoo/l10n/app_format.dart';
 import 'package:caldoo/l10n/app_strings.dart';
 
@@ -33,6 +37,9 @@ const Key mealDetailMissingKey = Key('meal_detail_missing');
 
 /// Key of the app-bar edit action (opens the meal editor).
 const Key mealDetailEditKey = Key('meal_detail_edit');
+
+/// Key of the app-bar 存为模版 action (opens the naming sheet).
+const Key mealDetailSaveTemplateKey = Key('meal_detail_save_template');
 
 /// Key of the app-bar delete action.
 const Key mealDetailDeleteKey = Key('meal_detail_delete');
@@ -116,6 +123,54 @@ class MealDetailScreen extends ConsumerWidget {
     context.go('/today');
   }
 
+  /// Saves the loaded meal as a reusable template behind the naming sheet.
+  ///
+  /// The sheet only collects the name (pre-filled from the item names); the
+  /// write goes through the `MealTemplateRepository` port with the meal's own
+  /// type and item lines — the template is a copy, so later edits to this
+  /// meal (or its deletion) never touch the template. A failed write surfaces
+  /// the shared save-failed snackbar.
+  Future<void> _saveAsTemplate(
+    BuildContext context,
+    WidgetRef ref,
+    MealWithItems group,
+  ) async {
+    final String? name = await showTemplateNameSheet(
+      context,
+      title: S.of(context).saveTemplateSheetTitle,
+      initialName: group.items.map((MealItem item) => item.name).join('、'),
+    );
+    if (name == null || !context.mounted) {
+      return;
+    }
+    try {
+      await ref
+          .read(mealTemplateRepositoryProvider)
+          .saveTemplate(
+            MealTemplate(
+              id: const Uuid().v4(),
+              name: name,
+              createdAt: clock.now(),
+              mealType: group.meal.mealType,
+              items: group.items,
+            ),
+          );
+    } on Object {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(S.of(context).errorSaveFailed)));
+      return;
+    }
+    if (!context.mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(S.of(context).templateSavedSnack)));
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final AsyncValue<MealWithItems?> detail = ref.watch(
@@ -130,6 +185,17 @@ class MealDetailScreen extends ConsumerWidget {
         title: Text(S.of(context).mealDetailTitle),
         actions: <Widget>[
           if (loaded) ...<Widget>[
+            IconButton(
+              key: mealDetailSaveTemplateKey,
+              tooltip: S.of(context).mealSaveTemplateAction,
+              icon: const Icon(Icons.bookmark_add_outlined),
+              onPressed: () {
+                final MealWithItems? group = detail.value;
+                if (group != null) {
+                  _saveAsTemplate(context, ref, group);
+                }
+              },
+            ),
             IconButton(
               key: mealDetailEditKey,
               tooltip: S.of(context).mealEditAction,

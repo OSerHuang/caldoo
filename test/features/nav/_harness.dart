@@ -50,7 +50,8 @@ class NavTestEnv {
     : meals = FakeMealRepository(),
       exercises = FakeExerciseRepository(),
       profile = FakeProfileRepository(),
-      weights = FakeWeightRepository();
+      weights = FakeWeightRepository(),
+      templates = FakeMealTemplateRepository();
 
   /// The in-memory meal store.
   final FakeMealRepository meals;
@@ -63,6 +64,9 @@ class NavTestEnv {
 
   /// The in-memory weight-history store (the day page's 体重 card).
   final FakeWeightRepository weights;
+
+  /// The in-memory meal-template store (the 存为模版 / 从模版记录 feature).
+  final FakeMealTemplateRepository templates;
 
   /// The live container after [pump].
   late ProviderContainer container;
@@ -112,6 +116,7 @@ class NavTestEnv {
       ProviderScope(
         overrides: [
           mealRepositoryProvider.overrideWithValue(meals),
+          mealTemplateRepositoryProvider.overrideWithValue(templates),
           exerciseRepositoryProvider.overrideWithValue(exercises),
           profileRepositoryProvider.overrideWithValue(profile),
           weightRepositoryProvider.overrideWithValue(weights),
@@ -162,6 +167,7 @@ class NavTestEnv {
     await exercises.dispose();
     await profile.dispose();
     await weights.dispose();
+    await templates.dispose();
     await _ownedDb?.close();
     _ownedDb = null;
   }

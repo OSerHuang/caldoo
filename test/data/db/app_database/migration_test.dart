@@ -11,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:caldoo/data/db/app_database.dart';
 import 'package:caldoo/data/repositories/mappers.dart' show foodFromRow;
 import 'package:caldoo/domain/models/food.dart' show FoodStatus, MeasureBasis;
+import 'package:caldoo/domain/models/meal.dart' show MealType;
 import 'package:caldoo/domain/models/user_profile.dart';
 
 import 'generated/schema.dart';
@@ -26,6 +27,7 @@ import 'generated/schema_v9.dart' as v9;
 import 'generated/schema_v10.dart' as v10;
 import 'generated/schema_v11.dart' as v11;
 import 'generated/schema_v12.dart' as v12;
+import 'generated/schema_v13.dart' as v13;
 
 void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
@@ -1094,6 +1096,112 @@ void main() {
         final saved = await db.userProfileDao.getProfile();
         expect(saved!.dailyGoalPreset, DailyGoalPreset.fastCut);
         expect(saved.dailyKcalGoalOverride, isNull);
+        await db.close();
+      },
+    );
+  });
+
+  group('v12 -> v13 meal-templates data integrity', () {
+    // v13 is purely additive: the new `meal_templates` table starts empty and
+    // every pre-existing row survives untouched.
+    const String mealId = 'meal-v13';
+    const int lunchTs = 1760000000; // 2025-10-09T08:53:20Z
+
+    test(
+      'preserves meals; meal_templates starts empty and is writable',
+      () async {
+        await verifier.testWithDataIntegrity(
+          oldVersion: 12,
+          newVersion: 13,
+          createOld: v12.DatabaseAtV12.new,
+          createNew: v13.DatabaseAtV13.new,
+          openTestedDatabase: AppDatabase.forTesting,
+          createItems: (batch, oldDb) {
+            batch.insert(
+              oldDb.meals,
+              const v12.MealsData(
+                id: mealId,
+                timestamp: lunchTs,
+                mealType: 'lunch',
+                note: '工作日午餐',
+              ),
+            );
+          },
+          validateItems: (newDb) async {
+            // Meals survive untouched.
+            final meals = await newDb.select(newDb.meals).get();
+            expect(meals, hasLength(1));
+            expect(meals.single.id, mealId);
+            expect(meals.single.note, '工作日午餐');
+
+            // The new table exists and starts empty.
+            final templates = await newDb.select(newDb.mealTemplates).get();
+            expect(templates, isEmpty);
+
+            // And it is writable through the generated v13 shape (one row per
+            // template, item lines as one JSON text column).
+            await newDb
+                .into(newDb.mealTemplates)
+                .insert(
+                  const v13.MealTemplatesData(
+                    id: 'tpl-1',
+                    name: '早餐标配',
+                    createdAt: lunchTs,
+                    mealType: 'breakfast',
+                    itemsJson:
+                        '[{"id":"i1","name":"鸡蛋","grams":60.0,"kcal":88,'
+                        '"carbG":0.6,"proteinG":7.6,"fatG":6.0,"saltG":0.0,'
+                        '"source":"ai"}]',
+                  ),
+                );
+            final written = await newDb.select(newDb.mealTemplates).getSingle();
+            expect(written.id, 'tpl-1');
+            expect(written.name, '早餐标配');
+            expect(written.mealType, 'breakfast');
+          },
+        );
+      },
+    );
+
+    test(
+      'a v12 database can save templates through the DAO after migrating',
+      () async {
+        final schema = await verifier.schemaAt(12);
+        final oldDb = v12.DatabaseAtV12(schema.newConnection());
+        await oldDb.batch((batch) {
+          batch.insert(
+            oldDb.meals,
+            const v12.MealsData(
+              id: mealId,
+              timestamp: lunchTs,
+              mealType: 'lunch',
+            ),
+          );
+        });
+        await oldDb.close();
+
+        final db = AppDatabase.forTesting(schema.newConnection());
+        // The DAO below speaks the current schema, so migrate to v13.
+        await verifier.migrateAndValidate(db, 13);
+
+        // The preserved meal is still readable through the current DAO...
+        final meal = await db.mealDao.getMeal(mealId);
+        expect(meal, isNotNull);
+
+        // ...and the new template DAO works on the migrated file.
+        await db.mealTemplateDao.insertTemplate(
+          MealTemplatesCompanion.insert(
+            id: 'tpl-1',
+            name: '晚餐模版',
+            createdAt: DateTime.fromMillisecondsSinceEpoch(lunchTs * 1000),
+            mealType: MealType.dinner,
+            itemsJson: '[]',
+          ),
+        );
+        final templates = await db.mealTemplateDao.getAll();
+        expect(templates, hasLength(1));
+        expect(templates.single.name, '晚餐模版');
+        expect(templates.single.mealType, MealType.dinner);
         await db.close();
       },
     );

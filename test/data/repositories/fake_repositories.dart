@@ -438,3 +438,60 @@ class FakeWeightRepository implements WeightRepository {
       ..sort((a, b) => a.dayKey.compareTo(b.dayKey));
   }
 }
+
+/// In-memory [MealTemplateRepository] over an `id -> MealTemplate` map.
+class FakeMealTemplateRepository implements MealTemplateRepository {
+  final Map<String, MealTemplate> _templates = <String, MealTemplate>{};
+  final StreamController<void> _changes = StreamController<void>.broadcast();
+
+  @override
+  Future<void> saveTemplate(MealTemplate template) async {
+    if (_templates.containsKey(template.id)) {
+      throw StateError('duplicate template id: ${template.id}');
+    }
+    _templates[template.id] = _stored(template);
+    _changes.add(null);
+  }
+
+  @override
+  Future<bool> updateTemplate(MealTemplate template) async {
+    if (!_templates.containsKey(template.id)) {
+      return false;
+    }
+    _templates[template.id] = _stored(template);
+    _changes.add(null);
+    return true;
+  }
+
+  @override
+  Future<void> deleteTemplate(String id) async {
+    if (_templates.remove(id) != null) {
+      _changes.add(null);
+    }
+  }
+
+  @override
+  Future<List<MealTemplate>> getAllTemplates() async => _newestFirst();
+
+  @override
+  Stream<List<MealTemplate>> watchTemplates() async* {
+    yield _newestFirst();
+    yield* _changes.stream.map((_) => _newestFirst());
+  }
+
+  /// Closes the change stream; call from `tearDown`.
+  Future<void> dispose() => _changes.close();
+
+  /// Newest first, matching the DAO's `createdAt DESC` ordering. Items are
+  /// immutable and shared by reference; only the timestamp is re-stored,
+  /// truncated to whole seconds like every other `dateTime()` column.
+  List<MealTemplate> _newestFirst() {
+    final list = <MealTemplate>[
+      for (final MealTemplate template in _templates.values) _stored(template),
+    ]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return list;
+  }
+
+  MealTemplate _stored(MealTemplate template) =>
+      template.copyWith(createdAt: storedInstant(template.createdAt));
+}

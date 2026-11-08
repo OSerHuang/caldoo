@@ -18,6 +18,7 @@ import 'package:flutter/foundation.dart';
 import 'package:caldoo/core/time/date_windows.dart' show MealWithItems;
 import 'package:caldoo/domain/models/daily_exercise.dart';
 import 'package:caldoo/domain/models/food.dart';
+import 'package:caldoo/domain/models/meal_template.dart';
 import 'package:caldoo/domain/models/user_profile.dart';
 import 'package:caldoo/domain/models/weight_entry.dart';
 
@@ -50,11 +51,14 @@ import 'package:caldoo/domain/models/weight_entry.dart';
 ///   happily and silently DROP the preset (the budget would fall back to the
 ///   BMR), so the version stamp makes the incompatibility explicit. Versions
 ///   2–5 remain importable — their profile simply has no preset.
-const int backupSchemaVersion = 6;
+/// * 7 — adds the `templates` section (the saved meal templates from the
+///   meal-detail 存为模版 action). Versions 2–6 remain importable: a missing
+///   section decodes as empty (an old backup simply carries no templates).
+const int backupSchemaVersion = 7;
 
 /// Versions [decodeBackup] can still read (the current one plus the legacy
 /// age-based profile shapes). Anything else is rejected outright.
-const Set<int> supportedBackupSchemaVersions = <int>{2, 3, 4, 5, 6};
+const Set<int> supportedBackupSchemaVersions = <int>{2, 3, 4, 5, 6, 7};
 
 /// `app_settings` keys that are transient UI state or device preferences, not
 /// user data.
@@ -83,6 +87,7 @@ class BackupData {
     this.meals = const <MealWithItems>[],
     this.dailyExercises = const <DailyExercise>[],
     this.weightEntries = const <WeightEntry>[],
+    this.templates = const <MealTemplate>[],
     this.settings = const <String, String>{},
   });
 
@@ -101,6 +106,9 @@ class BackupData {
   /// The one-per-day body-weight values.
   final List<WeightEntry> weightEntries;
 
+  /// Every saved meal template.
+  final List<MealTemplate> templates;
+
   /// Non-secret `app_settings` entries (excludes [backupExcludedSettingsKeys]).
   final Map<String, String> settings;
 
@@ -111,6 +119,7 @@ class BackupData {
       meals.isEmpty &&
       dailyExercises.isEmpty &&
       weightEntries.isEmpty &&
+      templates.isEmpty &&
       settings.isEmpty;
 
   @override
@@ -124,6 +133,7 @@ class BackupData {
         _mealsEqual(other.meals, meals) &&
         listEquals(other.dailyExercises, dailyExercises) &&
         listEquals(other.weightEntries, weightEntries) &&
+        listEquals(other.templates, templates) &&
         mapEquals(other.settings, settings);
   }
 
@@ -138,6 +148,7 @@ class BackupData {
     ),
     Object.hashAll(dailyExercises),
     Object.hashAll(weightEntries),
+    Object.hashAll(templates),
     Object.hashAll(
       settings.entries.map((entry) => Object.hash(entry.key, entry.value)),
     ),
@@ -147,7 +158,8 @@ class BackupData {
   String toString() =>
       'BackupData(profile: ${profile != null}, foods: ${foods.length}, '
       'meals: ${meals.length}, dailyExercises: ${dailyExercises.length}, '
-      'weightEntries: ${weightEntries.length}, settings: ${settings.length})';
+      'weightEntries: ${weightEntries.length}, templates: ${templates.length}, '
+      'settings: ${settings.length})';
 
   static bool _mealsEqual(List<MealWithItems> a, List<MealWithItems> b) {
     if (a.length != b.length) {
@@ -188,6 +200,8 @@ class ImportSummary {
     this.dailyExercisesSkipped = 0,
     this.weightEntriesImported = 0,
     this.weightEntriesSkipped = 0,
+    this.templatesImported = 0,
+    this.templatesSkipped = 0,
     this.settingsImported = 0,
     this.settingsSkipped = 0,
   });
@@ -216,6 +230,10 @@ class ImportSummary {
   final int weightEntriesImported;
   final int weightEntriesSkipped;
 
+  /// `meal_templates` counters.
+  final int templatesImported;
+  final int templatesSkipped;
+
   /// `app_settings` counters.
   final int settingsImported;
   final int settingsSkipped;
@@ -228,6 +246,7 @@ class ImportSummary {
       mealItemsImported +
       dailyExercisesImported +
       weightEntriesImported +
+      templatesImported +
       settingsImported;
 
   /// Rows dropped because an identical id/key already existed (or the parent
@@ -239,6 +258,7 @@ class ImportSummary {
       mealItemsSkipped +
       dailyExercisesSkipped +
       weightEntriesSkipped +
+      templatesSkipped +
       settingsSkipped;
 
   /// `true` when the file carried nothing importable.
@@ -262,6 +282,8 @@ class ImportSummary {
         other.dailyExercisesSkipped == dailyExercisesSkipped &&
         other.weightEntriesImported == weightEntriesImported &&
         other.weightEntriesSkipped == weightEntriesSkipped &&
+        other.templatesImported == templatesImported &&
+        other.templatesSkipped == templatesSkipped &&
         other.settingsImported == settingsImported &&
         other.settingsSkipped == settingsSkipped;
   }
@@ -280,6 +302,8 @@ class ImportSummary {
     dailyExercisesSkipped,
     weightEntriesImported,
     weightEntriesSkipped,
+    templatesImported,
+    templatesSkipped,
     settingsImported,
     settingsSkipped,
   );
@@ -293,6 +317,7 @@ class ImportSummary {
       'mealItems: $mealItemsImported/$mealItemsSkipped, '
       'dailyExercises: $dailyExercisesImported/$dailyExercisesSkipped, '
       'weightEntries: $weightEntriesImported/$weightEntriesSkipped, '
+      'templates: $templatesImported/$templatesSkipped, '
       'settings: $settingsImported/$settingsSkipped)';
 }
 

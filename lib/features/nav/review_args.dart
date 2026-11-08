@@ -9,14 +9,20 @@
 /// * [draftFromAnalysis] maps the AI wire items to editable `source: ai`
 ///   [MealItem]s (fresh ids, confidence preserved);
 /// * [mealTypeForHour] guesses the meal a fresh capture belongs to from the
-///   local hour, since the AI response carries no meal grouping.
+///   local hour, since the AI response carries no meal grouping;
+/// * [captureTimestampFor] is THE instant a fresh capture is attributed to —
+///   "now", or noon of the backfill day — the one rule every capture lane
+///   shares (the AI route inlines the same formula today; the 从模版记录
+///   lane calls this function directly).
 ///
 /// [ReviewArgs.photos] / [ReviewArgs.userText] forward the capture inputs so the
 /// review screen can ask the AI to correct a wrong estimate; they stay optional
 /// because a review payload may also be built by hand (deep links, tests).
 library;
 
+import 'package:clock/clock.dart';
 import 'package:caldoo/ai/schemas/meal_analysis.dart';
+import 'package:caldoo/core/time/date_windows.dart' show LocalOffset;
 import 'package:caldoo/domain/models/models.dart';
 import 'package:caldoo/features/meals/capture/image_codec.dart'
     show PreparedPhoto;
@@ -81,6 +87,25 @@ MealType mealTypeForHour(int hour) {
     return MealType.dinner;
   }
   return MealType.snack;
+}
+
+/// The instant a fresh capture is attributed to, under the app's own UTC
+/// [offset].
+///
+/// `null` records "now"; a backfill day is stamped at **noon of the target day
+/// under the app's own offset** — the same offset every day window resolves
+/// with — so the instant is provably inside that day's window for any
+/// supported UTC offset (±14h) and never depends on the machine's clock or
+/// timezone.
+DateTime captureTimestampFor(DateTime? targetDay, LocalOffset offset) {
+  if (targetDay == null) {
+    return clock.now();
+  }
+  return DateTime.utc(
+    targetDay.year,
+    targetDay.month,
+    targetDay.day,
+  ).subtract(offset.duration).add(const Duration(hours: 12));
 }
 
 String _newId() => const Uuid().v4();

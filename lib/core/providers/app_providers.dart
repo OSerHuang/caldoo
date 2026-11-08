@@ -50,6 +50,11 @@ final mealRepositoryProvider = Provider<MealRepository>(
   (ref) => DriftMealRepository(ref.watch(appDatabaseProvider)),
 );
 
+/// The `MealTemplateRepository` port, backed by the app database.
+final mealTemplateRepositoryProvider = Provider<MealTemplateRepository>(
+  (ref) => DriftMealTemplateRepository(ref.watch(appDatabaseProvider)),
+);
+
 /// The `DailyExerciseRepository` port, backed by the app database.
 final exerciseRepositoryProvider = Provider<DailyExerciseRepository>(
   (ref) => DriftExerciseRepository(ref.watch(appDatabaseProvider)),

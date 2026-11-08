@@ -12,6 +12,7 @@ import '../../domain/models/models.dart';
 import '../db/app_database.dart';
 import '../db/daos/meal_dao.dart' show MealWithItemRows;
 import 'food_supplement_codec.dart';
+import 'meal_template_items_codec.dart' show decodeTemplateItems;
 
 /// Maps the single-row profile.
 UserProfile userProfileFromRow(UserProfileRow row) => UserProfile(
@@ -106,4 +107,14 @@ WeightEntry weightEntryFromRow(WeightEntryRow row) {
 MealWithItems mealWithItemsFromRows(MealWithItemRows rows) => (
   meal: mealFromRow(rows.meal),
   items: <MealItem>[for (final item in rows.items) mealItemFromRow(item)],
+);
+
+/// Maps a saved meal template, decoding its `List<MealItem>` JSON column (the
+/// forgiving item codec drops corrupted lines instead of crashing the list).
+MealTemplate mealTemplateFromRow(MealTemplateRow row) => MealTemplate(
+  id: row.id,
+  name: row.name,
+  createdAt: row.createdAt,
+  mealType: row.mealType,
+  items: decodeTemplateItems(row.itemsJson),
 );
