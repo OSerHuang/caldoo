@@ -3316,6 +3316,381 @@ class WeightEntriesCompanion extends UpdateCompanion<WeightEntryRow> {
   }
 }
 
+class $MealTemplatesTable extends MealTemplates
+    with TableInfo<$MealTemplatesTable, MealTemplateRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MealTemplatesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<MealType, String> mealType =
+      GeneratedColumn<String>(
+        'meal_type',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+      ).withConverter<MealType>($MealTemplatesTable.$convertermealType);
+  static const VerificationMeta _itemsJsonMeta = const VerificationMeta(
+    'itemsJson',
+  );
+  @override
+  late final GeneratedColumn<String> itemsJson = GeneratedColumn<String>(
+    'items_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    createdAt,
+    mealType,
+    itemsJson,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'meal_templates';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<MealTemplateRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('items_json')) {
+      context.handle(
+        _itemsJsonMeta,
+        itemsJson.isAcceptableOrUnknown(data['items_json']!, _itemsJsonMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_itemsJsonMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  MealTemplateRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return MealTemplateRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      mealType: $MealTemplatesTable.$convertermealType.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}meal_type'],
+        )!,
+      ),
+      itemsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}items_json'],
+      )!,
+    );
+  }
+
+  @override
+  $MealTemplatesTable createAlias(String alias) {
+    return $MealTemplatesTable(attachedDatabase, alias);
+  }
+
+  static JsonTypeConverter2<MealType, String, String> $convertermealType =
+      const EnumNameConverter<MealType>(MealType.values);
+}
+
+class MealTemplateRow extends DataClass implements Insertable<MealTemplateRow> {
+  /// UUID of the template.
+  final String id;
+
+  /// User-visible (editable) name; defaults to the source meal's item names.
+  final String name;
+
+  /// When the template was saved (display + list ordering only).
+  final DateTime createdAt;
+
+  /// The source meal's type; the pre-filled meal type when the template is
+  /// used (the review screen's selector can change it).
+  final MealType mealType;
+
+  /// The copied food lines as `List<MealItem>` JSON (see the class doc).
+  final String itemsJson;
+  const MealTemplateRow({
+    required this.id,
+    required this.name,
+    required this.createdAt,
+    required this.mealType,
+    required this.itemsJson,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    {
+      map['meal_type'] = Variable<String>(
+        $MealTemplatesTable.$convertermealType.toSql(mealType),
+      );
+    }
+    map['items_json'] = Variable<String>(itemsJson);
+    return map;
+  }
+
+  MealTemplatesCompanion toCompanion(bool nullToAbsent) {
+    return MealTemplatesCompanion(
+      id: Value(id),
+      name: Value(name),
+      createdAt: Value(createdAt),
+      mealType: Value(mealType),
+      itemsJson: Value(itemsJson),
+    );
+  }
+
+  factory MealTemplateRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return MealTemplateRow(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      mealType: $MealTemplatesTable.$convertermealType.fromJson(
+        serializer.fromJson<String>(json['mealType']),
+      ),
+      itemsJson: serializer.fromJson<String>(json['itemsJson']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'mealType': serializer.toJson<String>(
+        $MealTemplatesTable.$convertermealType.toJson(mealType),
+      ),
+      'itemsJson': serializer.toJson<String>(itemsJson),
+    };
+  }
+
+  MealTemplateRow copyWith({
+    String? id,
+    String? name,
+    DateTime? createdAt,
+    MealType? mealType,
+    String? itemsJson,
+  }) => MealTemplateRow(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    createdAt: createdAt ?? this.createdAt,
+    mealType: mealType ?? this.mealType,
+    itemsJson: itemsJson ?? this.itemsJson,
+  );
+  MealTemplateRow copyWithCompanion(MealTemplatesCompanion data) {
+    return MealTemplateRow(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      mealType: data.mealType.present ? data.mealType.value : this.mealType,
+      itemsJson: data.itemsJson.present ? data.itemsJson.value : this.itemsJson,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MealTemplateRow(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('mealType: $mealType, ')
+          ..write('itemsJson: $itemsJson')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, name, createdAt, mealType, itemsJson);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is MealTemplateRow &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.createdAt == this.createdAt &&
+          other.mealType == this.mealType &&
+          other.itemsJson == this.itemsJson);
+}
+
+class MealTemplatesCompanion extends UpdateCompanion<MealTemplateRow> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<DateTime> createdAt;
+  final Value<MealType> mealType;
+  final Value<String> itemsJson;
+  final Value<int> rowid;
+  const MealTemplatesCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.mealType = const Value.absent(),
+    this.itemsJson = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  MealTemplatesCompanion.insert({
+    required String id,
+    required String name,
+    required DateTime createdAt,
+    required MealType mealType,
+    required String itemsJson,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       createdAt = Value(createdAt),
+       mealType = Value(mealType),
+       itemsJson = Value(itemsJson);
+  static Insertable<MealTemplateRow> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<DateTime>? createdAt,
+    Expression<String>? mealType,
+    Expression<String>? itemsJson,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (createdAt != null) 'created_at': createdAt,
+      if (mealType != null) 'meal_type': mealType,
+      if (itemsJson != null) 'items_json': itemsJson,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  MealTemplatesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<DateTime>? createdAt,
+    Value<MealType>? mealType,
+    Value<String>? itemsJson,
+    Value<int>? rowid,
+  }) {
+    return MealTemplatesCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      createdAt: createdAt ?? this.createdAt,
+      mealType: mealType ?? this.mealType,
+      itemsJson: itemsJson ?? this.itemsJson,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (mealType.present) {
+      map['meal_type'] = Variable<String>(
+        $MealTemplatesTable.$convertermealType.toSql(mealType.value),
+      );
+    }
+    if (itemsJson.present) {
+      map['items_json'] = Variable<String>(itemsJson.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MealTemplatesCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('mealType: $mealType, ')
+          ..write('itemsJson: $itemsJson, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -3326,6 +3701,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $MealItemsTable mealItems = $MealItemsTable(this);
   late final $DailyExercisesTable dailyExercises = $DailyExercisesTable(this);
   late final $WeightEntriesTable weightEntries = $WeightEntriesTable(this);
+  late final $MealTemplatesTable mealTemplates = $MealTemplatesTable(this);
   late final UserProfileDao userProfileDao = UserProfileDao(
     this as AppDatabase,
   );
@@ -3334,6 +3710,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final ExerciseDao exerciseDao = ExerciseDao(this as AppDatabase);
   late final WeightDao weightDao = WeightDao(this as AppDatabase);
   late final AppSettingsDao appSettingsDao = AppSettingsDao(
+    this as AppDatabase,
+  );
+  late final MealTemplateDao mealTemplateDao = MealTemplateDao(
     this as AppDatabase,
   );
   @override
@@ -3348,6 +3727,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     mealItems,
     dailyExercises,
     weightEntries,
+    mealTemplates,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -5264,6 +5644,216 @@ typedef $$WeightEntriesTableProcessedTableManager =
       WeightEntryRow,
       PrefetchHooks Function()
     >;
+typedef $$MealTemplatesTableCreateCompanionBuilder =
+    MealTemplatesCompanion Function({
+      required String id,
+      required String name,
+      required DateTime createdAt,
+      required MealType mealType,
+      required String itemsJson,
+      Value<int> rowid,
+    });
+typedef $$MealTemplatesTableUpdateCompanionBuilder =
+    MealTemplatesCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<DateTime> createdAt,
+      Value<MealType> mealType,
+      Value<String> itemsJson,
+      Value<int> rowid,
+    });
+
+class $$MealTemplatesTableFilterComposer
+    extends Composer<_$AppDatabase, $MealTemplatesTable> {
+  $$MealTemplatesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<MealType, MealType, String> get mealType =>
+      $composableBuilder(
+        column: $table.mealType,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnFilters<String> get itemsJson => $composableBuilder(
+    column: $table.itemsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$MealTemplatesTableOrderingComposer
+    extends Composer<_$AppDatabase, $MealTemplatesTable> {
+  $$MealTemplatesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get mealType => $composableBuilder(
+    column: $table.mealType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get itemsJson => $composableBuilder(
+    column: $table.itemsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$MealTemplatesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $MealTemplatesTable> {
+  $$MealTemplatesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<MealType, String> get mealType =>
+      $composableBuilder(column: $table.mealType, builder: (column) => column);
+
+  GeneratedColumn<String> get itemsJson =>
+      $composableBuilder(column: $table.itemsJson, builder: (column) => column);
+}
+
+class $$MealTemplatesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $MealTemplatesTable,
+          MealTemplateRow,
+          $$MealTemplatesTableFilterComposer,
+          $$MealTemplatesTableOrderingComposer,
+          $$MealTemplatesTableAnnotationComposer,
+          $$MealTemplatesTableCreateCompanionBuilder,
+          $$MealTemplatesTableUpdateCompanionBuilder,
+          (
+            MealTemplateRow,
+            BaseReferences<_$AppDatabase, $MealTemplatesTable, MealTemplateRow>,
+          ),
+          MealTemplateRow,
+          PrefetchHooks Function()
+        > {
+  $$MealTemplatesTableTableManager(_$AppDatabase db, $MealTemplatesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$MealTemplatesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$MealTemplatesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$MealTemplatesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<MealType> mealType = const Value.absent(),
+                Value<String> itemsJson = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MealTemplatesCompanion(
+                id: id,
+                name: name,
+                createdAt: createdAt,
+                mealType: mealType,
+                itemsJson: itemsJson,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                required DateTime createdAt,
+                required MealType mealType,
+                required String itemsJson,
+                Value<int> rowid = const Value.absent(),
+              }) => MealTemplatesCompanion.insert(
+                id: id,
+                name: name,
+                createdAt: createdAt,
+                mealType: mealType,
+                itemsJson: itemsJson,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$MealTemplatesTable, MealTemplateRow>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $MealTemplatesTable,
+                    MealTemplateRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$MealTemplatesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $MealTemplatesTable,
+      MealTemplateRow,
+      $$MealTemplatesTableFilterComposer,
+      $$MealTemplatesTableOrderingComposer,
+      $$MealTemplatesTableAnnotationComposer,
+      $$MealTemplatesTableCreateCompanionBuilder,
+      $$MealTemplatesTableUpdateCompanionBuilder,
+      (
+        MealTemplateRow,
+        BaseReferences<_$AppDatabase, $MealTemplatesTable, MealTemplateRow>,
+      ),
+      MealTemplateRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -5282,4 +5872,6 @@ class $AppDatabaseManager {
       $$DailyExercisesTableTableManager(_db, _db.dailyExercises);
   $$WeightEntriesTableTableManager get weightEntries =>
       $$WeightEntriesTableTableManager(_db, _db.weightEntries);
+  $$MealTemplatesTableTableManager get mealTemplates =>
+      $$MealTemplatesTableTableManager(_db, _db.mealTemplates);
 }

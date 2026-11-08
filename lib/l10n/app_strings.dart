@@ -401,6 +401,62 @@ class S {
   String get mealTotalsThatDay => '当日累计';
 
   // ---------------------------------------------------------------------------
+  // Meal templates
+  // ---------------------------------------------------------------------------
+
+  /// Detail app-bar action that saves the meal as a reusable template.
+  String get mealSaveTemplateAction => '存为模版';
+
+  /// Save-as-template sheet title (also the confirm action's label context).
+  String get saveTemplateSheetTitle => '存为模版';
+
+  /// Rename-template sheet title.
+  String get templateRenameTitle => '重命名模版';
+
+  /// The template-name field's label.
+  String get templateNameLabel => '模版名称';
+
+  /// The template-name field's hint.
+  String get templateNameHint => '如：早餐标配';
+
+  /// Snackbar after a meal was saved as a template.
+  String get templateSavedSnack => '已存为模版';
+
+  /// The capture screen's entry that records a meal from a saved template.
+  String get captureUseTemplate => '从模版记录';
+
+  /// Template-picker app bar title.
+  String get templatePickerTitle => '选择模版';
+
+  /// Template-picker empty state: no template exists yet.
+  String get templatePickerEmpty => '还没有模版，在往期一餐的详情页点「存为模版」即可创建';
+
+  /// 我的-tab entry title for the template library.
+  String get templateLibraryTitle => '餐食模版';
+
+  /// 我的-tab entry subtitle for the template library.
+  String get templateLibrarySubtitle => '保存常吃的一餐，下次一键填入';
+
+  /// A template row's content line: the item names (joined by the caller),
+  /// then the pre-formatted total energy.
+  String templateRowLineWith(String names, String energy) => '$names · $energy';
+
+  /// Template-library empty state.
+  String get templateLibraryEmpty => '还没有模版，在餐食详情页点「存为模版」即可创建';
+
+  /// A template row's rename action.
+  String get templateRenameAction => '重命名';
+
+  /// Delete-template confirmation title.
+  String get templateDeleteConfirmTitle => '删除这个模版？';
+
+  /// Delete-template confirmation body: recorded meals are untouched.
+  String get templateDeleteConfirmBody => '仅删除该模版，不会影响已记录的餐食。';
+
+  /// Snackbar after a template was deleted.
+  String get templateDeletedSnack => '模版已删除';
+
+  // ---------------------------------------------------------------------------
   // Daily summary
   // ---------------------------------------------------------------------------
 

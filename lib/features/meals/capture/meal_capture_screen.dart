@@ -1,6 +1,8 @@
 /// Meal capture screen: photos (camera / gallery, 1..3) and/or free Chinese
 /// text (typed or dictated with the keyboard's own microphone), then a submit
-/// that runs the AI analysis and routes to review.
+/// that runs the AI analysis and routes to review — or, alternatively, a
+/// 从模版记录 entry that fills the review form straight from a saved meal
+/// template (no AI call at all).
 ///
 /// Layout follows the settings screen conventions (Material 3 defaults, a
 /// 16 px page padding, `Key`s on every interactive widget so widget tests do
@@ -15,6 +17,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:caldoo/core/providers/app_providers.dart'
     show isOfflineProvider;
 import 'package:caldoo/core/ui/shell_insets.dart';
+import 'package:caldoo/domain/models/models.dart';
+import 'package:caldoo/features/meals/templates/template_apply.dart'
+    show templateReviewRouterProvider;
+import 'package:caldoo/features/meals/templates/template_picker_screen.dart';
 import 'package:caldoo/features/offline/offline_ui.dart';
 import 'package:caldoo/l10n/app_strings.dart';
 
@@ -35,6 +41,9 @@ const Key captureVoiceButtonKey = Key('capture_voice_button');
 
 /// Key of the hint line beside the voice entry.
 const Key captureVoiceHintKey = Key('capture_voice_hint');
+
+/// Key of the 从模版记录 entry.
+const Key captureTemplateButtonKey = Key('capture_template_button');
 
 /// Capture photos and/or free text for one meal.
 class MealCaptureScreen extends ConsumerStatefulWidget {
@@ -103,6 +112,28 @@ class _MealCaptureScreenState extends ConsumerState<MealCaptureScreen> {
       // The record is complete: start the next capture from a clean slate.
       // A cancelled review (`false`/`null`) keeps the inputs so the user can
       // retry or correct the same photos.
+      _text.clear();
+      ref.read(captureControllerProvider.notifier).reset();
+    }
+  }
+
+  /// The 从模版记录 entry: pick a template, then route into the review form
+  /// with the template-filled draft (no AI call at all).
+  ///
+  /// The routing is a provider seam like [reviewRouterProvider], so tests
+  /// record the template instead of navigating. A cancelled pick or a
+  /// dismissed review leaves the capture inputs untouched; a completed record
+  /// clears them, exactly like the AI path.
+  Future<void> _useTemplate() async {
+    final MealTemplate? template = await MealTemplatePicker.push(context);
+    if (template == null || !mounted) {
+      return;
+    }
+    final bool? saved = await ref.read(templateReviewRouterProvider)(
+      context,
+      template,
+    );
+    if (saved == true && mounted) {
       _text.clear();
       ref.read(captureControllerProvider.notifier).reset();
     }
@@ -244,6 +275,17 @@ class _MealCaptureScreenState extends ConsumerState<MealCaptureScreen> {
             S.of(context).capturePrivacyHint,
             key: const Key('capture_privacy_hint'),
             textAlign: TextAlign.center,
+          ),
+          // The template lane is the alternative path, so it sits BELOW the
+          // primary CTA at the very bottom of the form: the AI-identify flow
+          // keeps its above-the-fold position (and every test surface that
+          // taps the submit button keeps its viewport geometry).
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
+            key: captureTemplateButtonKey,
+            onPressed: _useTemplate,
+            icon: const Icon(Icons.bookmark_border),
+            label: Text(S.of(context).captureUseTemplate),
           ),
         ],
       ),

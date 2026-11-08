@@ -12,6 +12,7 @@ import 'package:caldoo/data/db/app_database.dart';
 import 'package:caldoo/data/repositories/drift_exercise_repository.dart';
 import 'package:caldoo/data/repositories/drift_food_repository.dart';
 import 'package:caldoo/data/repositories/drift_meal_repository.dart';
+import 'package:caldoo/data/repositories/drift_meal_template_repository.dart';
 import 'package:caldoo/data/repositories/drift_profile_repository.dart';
 import 'package:caldoo/domain/models/models.dart';
 import 'package:caldoo/features/settings/ai_settings.dart';
@@ -27,8 +28,8 @@ import '../_fakes.dart';
 final DateTime pinnedNow = DateTime.utc(2026, 1, 5);
 
 /// Seeds a rich, fully-populated dataset into [db]. Counts are asserted by the
-/// round-trip test below: 1 profile, 2 foods, 2 meals, 3 items, 2 exercises and
-/// 2 persisted settings (`notice_seen` is excluded).
+/// round-trip test below: 1 profile, 2 foods, 2 meals, 3 items, 2 exercises,
+/// 2 persisted settings (`notice_seen` is excluded) and 1 meal template.
 Future<void> seedEverything(AppDatabase db) async {
   await DriftProfileRepository(db).saveProfile(
     UserProfile(
@@ -152,6 +153,43 @@ Future<void> seedEverything(AppDatabase db) async {
   );
   // Transient UI state: must NEVER appear in an export.
   await db.appSettingsDao.setValue('notice_seen', 'true');
+
+  // A saved meal template: a snapshot of the breakfast above, with both an
+  // AI line and a label-backed one (source/foodId must survive the trip).
+  await DriftMealTemplateRepository(db).saveTemplate(
+    MealTemplate(
+      id: 't1',
+      name: '早餐标配',
+      createdAt: DateTime(2026, 3, 4, 8),
+      mealType: MealType.breakfast,
+      items: const <MealItem>[
+        MealItem(
+          id: 't1-i1',
+          foodId: 'f1',
+          name: '全麦面包',
+          grams: 80,
+          kcal: 200,
+          carbG: 36.2,
+          proteinG: 7.6,
+          fatG: 3,
+          saltG: 0.8,
+          source: FoodSource.label,
+        ),
+        MealItem(
+          id: 't1-i2',
+          name: '鸡蛋',
+          grams: 55,
+          kcal: 78,
+          carbG: 0.6,
+          proteinG: 6.4,
+          fatG: 5.3,
+          saltG: 0.2,
+          source: FoodSource.ai,
+          confidence: 0.7,
+        ),
+      ],
+    ),
+  );
 }
 
 /// Every JSON object key anywhere in [node], for the secret-field scan.
@@ -192,12 +230,12 @@ void main() {
       final String payload = await sourceService.exportToJson();
       final ImportSummary summary = await targetService.importFromJson(payload);
 
-      // The export is stamped with the current (goal-preset) version.
-      expect(backupSchemaVersion, 6);
-      expect(supportedBackupSchemaVersions, <int>{2, 3, 4, 5, 6});
+      // The export is stamped with the current (templates) version.
+      expect(backupSchemaVersion, 7);
+      expect(supportedBackupSchemaVersions, <int>{2, 3, 4, 5, 6, 7});
       final Map<String, dynamic> exported =
           jsonDecode(payload) as Map<String, dynamic>;
-      expect(exported['schemaVersion'], 6);
+      expect(exported['schemaVersion'], 7);
 
       // v6 carries the BMR-relative goal preset next to the BMR override: the
       // preset follows the weight, so the profile stores NO fixed number.
@@ -233,9 +271,21 @@ void main() {
         (exported['profile'] as Map<String, dynamic>).containsKey('age'),
         isFalse,
       );
+      // v7 carries the meal templates: one JSON object per template, its item
+      // lines nested inside.
+      final Map<String, dynamic> exportedTemplate =
+          (exported['templates'] as List<Object?>).single
+              as Map<String, dynamic>;
+      expect(exportedTemplate['name'], '早餐标配');
+      expect(exportedTemplate['mealType'], 'breakfast');
+      final Map<String, dynamic> exportedTemplateItem =
+          (exportedTemplate['items'] as List<Object?>).first
+              as Map<String, dynamic>;
+      expect(exportedTemplateItem['kcal'], 200);
+      expect(exportedTemplateItem['kcal'], isA<int>());
 
       // Deep equality on the whole snapshot: profile, foods, meals+items,
-      // exercises and settings, every field included.
+      // exercises, templates and settings, every field included.
       final BackupData expected = await sourceService.capture();
       final BackupData actual = await targetService.capture();
       expect(actual, expected);
@@ -247,8 +297,9 @@ void main() {
       expect(summary.mealItemsImported, 3);
       expect(summary.dailyExercisesImported, 2);
       expect(summary.weightEntriesImported, 2);
+      expect(summary.templatesImported, 1);
       expect(summary.settingsImported, 2);
-      expect(summary.totalImported, 14);
+      expect(summary.totalImported, 15);
 
       // Spot-check the nullable fields explicitly, so a broken `==` cannot
       // hide a silently-coerced null (the blank-stays-blank contract).
@@ -308,6 +359,26 @@ void main() {
       expect(
         actual.weightEntries.firstWhere((e) => e.weightKg == 54.7).dayKey,
         DateTime.utc(2026, 3, 10),
+      );
+      // The meal template survives row-for-row: type, timestamp, and item
+      // lines with their source/foodId/confidence.
+      expect(actual.templates, hasLength(1));
+      expect(actual.templates.single.name, '早餐标配');
+      expect(actual.templates.single.mealType, MealType.breakfast);
+      expect(actual.templates.single.createdAt, DateTime(2026, 3, 4, 8));
+      expect(
+        actual.templates.single.items.firstWhere((i) => i.id == 't1-i1').foodId,
+        'f1',
+      );
+      expect(
+        actual.templates.single.items.firstWhere((i) => i.id == 't1-i1').source,
+        FoodSource.label,
+      );
+      expect(
+        actual.templates.single.items
+            .firstWhere((i) => i.id == 't1-i2')
+            .confidence,
+        0.7,
       );
     });
 
@@ -497,6 +568,36 @@ void main() {
         throwsA(isA<BackupFormatException>()),
       );
     });
+  });
+
+  group('legacy schemaVersion 6 backup (no templates section) import', () {
+    test(
+      'a missing templates section decodes as empty and imports cleanly',
+      () async {
+        late AppDatabase db;
+        db = testDb();
+        addTearDown(db.close);
+
+        final String payload = jsonEncode(<String, Object?>{
+          'schemaVersion': 6,
+          'profile': null,
+          'foods': <Object?>[],
+          'meals': <Object?>[],
+          'dailyExercises': <Object?>[],
+          'weightEntries': <Object?>[],
+          'settings': <String, String>{},
+        });
+
+        final BackupData data = decodeBackup(payload, now: pinnedNow);
+        expect(data.templates, isEmpty);
+
+        final ImportSummary summary = await BackupService(db)
+            .importFromJson(payload);
+        expect(summary.templatesImported, 0);
+        expect(summary.templatesSkipped, 0);
+        expect((await BackupService(db).capture()).templates, isEmpty);
+      },
+    );
   });
 
   group('import conflict policy (existing row wins)', () {

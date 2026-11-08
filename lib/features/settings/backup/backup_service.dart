@@ -20,11 +20,13 @@ import 'package:caldoo/core/time/date_windows.dart' show MealWithItems;
 import 'package:caldoo/data/db/app_database.dart';
 import 'package:caldoo/data/repositories/drift_food_repository.dart';
 import 'package:caldoo/data/repositories/drift_meal_repository.dart';
+import 'package:caldoo/data/repositories/drift_meal_template_repository.dart';
 import 'package:caldoo/data/repositories/drift_profile_repository.dart';
 import 'package:caldoo/data/repositories/mappers.dart';
 import 'package:caldoo/domain/models/daily_exercise.dart';
 import 'package:caldoo/domain/models/food.dart';
 import 'package:caldoo/domain/models/meal_item.dart';
+import 'package:caldoo/domain/models/meal_template.dart';
 import 'package:caldoo/domain/models/user_profile.dart';
 import 'package:caldoo/domain/models/weight_entry.dart';
 
@@ -42,6 +44,7 @@ class BackupService {
       _profiles = DriftProfileRepository(db),
       _foods = DriftFoodRepository(db),
       _meals = DriftMealRepository(db),
+      _templates = DriftMealTemplateRepository(db),
       _clock = clock ?? const Clock();
 
   /// A range wide enough to contain any row a personal app could hold, so the
@@ -55,6 +58,7 @@ class BackupService {
   final DriftProfileRepository _profiles;
   final DriftFoodRepository _foods;
   final DriftMealRepository _meals;
+  final DriftMealTemplateRepository _templates;
 
   /// Reads the entire local dataset into a [BackupData] snapshot.
   ///
@@ -81,6 +85,8 @@ class BackupService {
         weightEntryFromRow(row),
     ];
 
+    final List<MealTemplate> templates = await _templates.getAllTemplates();
+
     final Map<String, String> settings = <String, String>{
       for (final AppSetting row in await _db.appSettingsDao.getAll())
         if (!backupExcludedSettingsKeys.contains(row.key)) row.key: row.value,
@@ -92,6 +98,7 @@ class BackupService {
       meals: meals,
       dailyExercises: dailyExercises,
       weightEntries: weightEntries,
+      templates: templates,
       settings: settings,
     );
   }
@@ -206,6 +213,25 @@ class BackupService {
         }
       }
 
+      // --- meal templates ---------------------------------------------------
+      // Same additive-by-id policy. A template is a standalone snapshot (no
+      // children), so a collision skips exactly one row.
+      int templatesImported = 0;
+      int templatesSkipped = 0;
+      final Set<String> existingTemplateIds = <String>{
+        for (final MealTemplate template in await _templates.getAllTemplates())
+          template.id,
+      };
+      for (final MealTemplate template in data.templates) {
+        if (existingTemplateIds.contains(template.id)) {
+          templatesSkipped++;
+        } else {
+          await _templates.saveTemplate(template);
+          existingTemplateIds.add(template.id);
+          templatesImported++;
+        }
+      }
+
       // --- settings ---------------------------------------------------------
       int settingsImported = 0;
       int settingsSkipped = 0;
@@ -234,6 +260,8 @@ class BackupService {
         dailyExercisesSkipped: dailyExercisesSkipped,
         weightEntriesImported: weightEntriesImported,
         weightEntriesSkipped: weightEntriesSkipped,
+        templatesImported: templatesImported,
+        templatesSkipped: templatesSkipped,
         settingsImported: settingsImported,
         settingsSkipped: settingsSkipped,
       );

@@ -19,6 +19,7 @@ const Key profileTabScreenKey = Key('profile_tab_screen');
 
 /// Keys of the hub entries.
 const Key profileTabDetailsKey = Key('profile_tab_details');
+const Key profileTabTemplatesKey = Key('profile_tab_templates');
 const Key profileTabSettingsKey = Key('profile_tab_settings');
 const Key profileTabPrivacyKey = Key('profile_tab_privacy');
 const Key profileTabBackupKey = Key('profile_tab_backup');
@@ -58,6 +59,18 @@ class ProfileTabScreen extends StatelessWidget {
                     title: S.of(context).profileDetailsTitle,
                     subtitle: S.of(context).profileDetailsSubtitle,
                     location: '/profile/details',
+                  ),
+                  Divider(
+                    height: 1,
+                    indent: 68,
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                  ),
+                  _Entry(
+                    tileKey: profileTabTemplatesKey,
+                    icon: Icons.bookmark_outline,
+                    title: S.of(context).templateLibraryTitle,
+                    subtitle: S.of(context).templateLibrarySubtitle,
+                    location: '/profile/templates',
                   ),
                   Divider(
                     height: 1,

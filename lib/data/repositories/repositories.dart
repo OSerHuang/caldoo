@@ -8,5 +8,6 @@ library;
 export 'drift_exercise_repository.dart';
 export 'drift_food_repository.dart';
 export 'drift_meal_repository.dart';
+export 'drift_meal_template_repository.dart';
 export 'drift_profile_repository.dart';
 export 'drift_weight_repository.dart';

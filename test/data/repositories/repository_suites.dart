@@ -1007,3 +1007,130 @@ void runExerciseRepositorySuite(DailyExerciseRepository Function() create) {
     await subscription.cancel();
   });
 }
+
+/// A saved meal template; the default createdAt keeps full model equality
+/// round-trips exact (whole second), and the default items mix an AI line
+/// with a label-backed one so the source/foodId contract is visible.
+MealTemplate templateFixture({
+  String id = 't1',
+  String name = '早餐标配',
+  DateTime? createdAt,
+  MealType mealType = MealType.breakfast,
+  List<MealItem>? items,
+}) => MealTemplate(
+  id: id,
+  name: name,
+  createdAt: createdAt ?? DateTime(2026, 9, 21, 8),
+  mealType: mealType,
+  items:
+      items ??
+      <MealItem>[
+        itemFixture(id: 'ti-egg', name: '鸡蛋', grams: 60, kcal: 88),
+        itemFixture(
+          id: 'ti-bread',
+          name: '全麦面包',
+          foodId: 'f-bread',
+          source: FoodSource.label,
+        ),
+      ],
+);
+
+void runMealTemplateRepositorySuite(MealTemplateRepository Function() create) {
+  late MealTemplateRepository templates;
+  setUp(() => templates = create());
+
+  test('saveTemplate then getAllTemplates round-trips the template', () async {
+    await templates.saveTemplate(templateFixture());
+
+    final loaded = await templates.getAllTemplates();
+
+    expect(loaded, hasLength(1));
+    expect(loaded.single, equals(templateFixture()));
+  });
+
+  test('getAllTemplates orders newest first', () async {
+    await templates.saveTemplate(
+      templateFixture(id: 't-old', createdAt: DateTime(2026, 9, 1, 8)),
+    );
+    await templates.saveTemplate(
+      templateFixture(id: 't-new', createdAt: DateTime(2026, 9, 20, 8)),
+    );
+
+    final loaded = await templates.getAllTemplates();
+
+    expect(loaded.map((MealTemplate t) => t.id).toList(), <String>[
+      't-new',
+      't-old',
+    ]);
+  });
+
+  test('saveTemplate fails on a duplicate id', () async {
+    await templates.saveTemplate(templateFixture());
+
+    // The concrete failure type is implementation detail (a fake StateError,
+    // the database's UNIQUE-constraint error); the contract is "it fails".
+    await expectLater(
+      templates.saveTemplate(templateFixture()),
+      throwsA(isA<Object>()),
+    );
+  });
+
+  test(
+    'updateTemplate replaces the stored row; missing id reports false',
+    () async {
+      await templates.saveTemplate(templateFixture());
+
+      final updated = await templates.updateTemplate(
+        templateFixture(name: '改名后的模版'),
+      );
+      expect(updated, isTrue);
+      expect((await templates.getAllTemplates()).single.name, '改名后的模版');
+      // The other fields survive the whole-record replace.
+      expect(
+        (await templates.getAllTemplates()).single.mealType,
+        MealType.breakfast,
+      );
+
+      final missing = await templates.updateTemplate(
+        templateFixture(id: 't-missing'),
+      );
+      expect(missing, isFalse);
+    },
+  );
+
+  test('deleteTemplate removes exactly the targeted row', () async {
+    await templates.saveTemplate(templateFixture(id: 't1'));
+    await templates.saveTemplate(templateFixture(id: 't2'));
+
+    await templates.deleteTemplate('t1');
+
+    final loaded = await templates.getAllTemplates();
+    expect(loaded.map((MealTemplate t) => t.id).toList(), <String>['t2']);
+  });
+
+  test('watchTemplates emits the initial list, then every change', () async {
+    final emissions = <List<MealTemplate>>[];
+    final subscription = templates.watchTemplates().listen(emissions.add);
+    await pumpEventQueue();
+    expect(emissions.single, isEmpty);
+
+    await templates.saveTemplate(templateFixture());
+    await pumpEventQueue();
+    expect(emissions.last, hasLength(1));
+
+    await templates.updateTemplate(templateFixture(name: '重命名'));
+    await pumpEventQueue();
+    expect(emissions.last.single.name, '重命名');
+
+    await templates.deleteTemplate(templateFixture().id);
+    await pumpEventQueue();
+    expect(emissions.last, isEmpty);
+
+    // An idempotent no-op (deleting a missing row) emits nothing.
+    await templates.deleteTemplate('t-missing');
+    await pumpEventQueue();
+    expect(emissions, hasLength(4));
+
+    await subscription.cancel();
+  });
+}

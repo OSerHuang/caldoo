@@ -23,15 +23,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:caldoo/core/providers/app_providers.dart'
-    show connectivityProvider, foodRepositoryProvider, isOfflineProvider;
+    show
+        connectivityProvider,
+        foodRepositoryProvider,
+        isOfflineProvider,
+        mealTemplateRepositoryProvider;
 import 'package:caldoo/data/db/app_database.dart';
-import 'package:caldoo/domain/models/models.dart' show Food, FoodSource;
+import 'package:caldoo/domain/models/models.dart'
+    show Food, FoodSource, MealItem, MealTemplate, MealType;
 import 'package:caldoo/domain/repositories/repositories.dart'
     show FoodRepository;
 import 'package:caldoo/features/meals/capture/image_codec.dart';
 import 'package:caldoo/features/meals/capture/meal_capture_controller.dart';
 import 'package:caldoo/features/meals/capture/meal_capture_screen.dart';
 import 'package:caldoo/features/meals/capture/review_placeholder_screen.dart';
+import 'package:caldoo/features/meals/templates/template_apply.dart'
+    show templateReviewRouterProvider;
+import 'package:caldoo/features/meals/templates/template_picker_screen.dart'
+    show templatePickerEmptyKey;
 import 'package:caldoo/features/settings/ai_settings.dart';
 import 'package:caldoo/ai/ai_client.dart' show Unknown;
 import 'package:caldoo/features/settings/settings_providers.dart'
@@ -44,6 +53,8 @@ import 'package:caldoo/l10n/app_strings.dart';
 import 'package:image/image.dart' as image;
 
 import '../../../data/db/_test_db.dart';
+import '../../../data/repositories/fake_repositories.dart'
+    show FakeMealTemplateRepository;
 import '../../settings/_fakes.dart';
 import '_fakes.dart';
 
@@ -750,6 +761,123 @@ void main() {
       await tester.tap(find.byKey(const Key('capture_submit_button')));
       await tester.pumpAndSettle();
       expect(router.submission!.userText, '中午吃了一碗牛肉面');
+    });
+  });
+
+  group('从模版记录 entry', () {
+    MealTemplate seededTemplate() => MealTemplate(
+      id: 'tpl-1',
+      name: '早餐标配',
+      createdAt: DateTime(2026, 3, 4, 8),
+      mealType: MealType.breakfast,
+      items: const <MealItem>[
+        MealItem(
+          id: 'ti-1',
+          name: '米饭',
+          grams: 150,
+          kcal: 174,
+          carbG: 38.9,
+          proteinG: 4.2,
+          fatG: 0.6,
+          saltG: 0.01,
+          source: FoodSource.ai,
+        ),
+      ],
+    );
+
+    testWidgets('the picker opens, and a chosen template routes to review '
+        'without any AI call', (tester) async {
+      final FakeMealTemplateRepository fakeTemplates =
+          FakeMealTemplateRepository();
+      await fakeTemplates.saveTemplate(seededTemplate());
+      final RecordingTemplateRouter templateRouter = RecordingTemplateRouter(
+        saved: true,
+      );
+      await _pumpCapture(
+        tester,
+        db: db,
+        keyStore: keyStore,
+        extraOverrides: <Override>[
+          mealTemplateRepositoryProvider.overrideWithValue(fakeTemplates),
+          templateReviewRouterProvider.overrideWithValue(templateRouter.call),
+        ],
+      );
+
+      // The template lane sits below the primary CTA at the bottom of the
+      // capture form — off-screen on the 800x600 test viewport until scrolled.
+      final Finder templateButton = find.byKey(captureTemplateButtonKey);
+      await tester.ensureVisible(templateButton);
+      await tester.pumpAndSettle();
+      await tester.tap(templateButton);
+      await tester.pumpAndSettle();
+
+      // The picker is on stage with the seeded row.
+      expect(find.byKey(const Key('template_pick_tpl-1')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('template_pick_tpl-1')));
+      await tester.pumpAndSettle();
+
+      expect(templateRouter.calls, 1);
+      expect(templateRouter.template!.id, 'tpl-1');
+      // A completed record clears the capture inputs, like the AI path.
+      expect(_textField(tester).controller!.text, isEmpty);
+    });
+
+    testWidgets('a cancelled pick leaves the capture inputs untouched', (
+      tester,
+    ) async {
+      final FakeMealTemplateRepository fakeTemplates =
+          FakeMealTemplateRepository();
+      await fakeTemplates.saveTemplate(seededTemplate());
+      final RecordingTemplateRouter templateRouter = RecordingTemplateRouter();
+      await _pumpCapture(
+        tester,
+        db: db,
+        keyStore: keyStore,
+        extraOverrides: <Override>[
+          mealTemplateRepositoryProvider.overrideWithValue(fakeTemplates),
+          templateReviewRouterProvider.overrideWithValue(templateRouter.call),
+        ],
+      );
+
+      await tester.enterText(
+        find.byKey(const Key('capture_text_field')),
+        '半碗面',
+      );
+      await tester.pump();
+      final Finder templateButton = find.byKey(captureTemplateButtonKey);
+      await tester.ensureVisible(templateButton);
+      await tester.pumpAndSettle();
+      await tester.tap(templateButton);
+      await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      expect(templateRouter.calls, 0);
+      expect(_textField(tester).controller!.text, '半碗面');
+    });
+
+    testWidgets('an empty catalogue shows the pointing empty state', (
+      tester,
+    ) async {
+      await _pumpCapture(
+        tester,
+        db: db,
+        keyStore: keyStore,
+        extraOverrides: <Override>[
+          mealTemplateRepositoryProvider.overrideWithValue(
+            FakeMealTemplateRepository(),
+          ),
+        ],
+      );
+
+      final Finder templateButton = find.byKey(captureTemplateButtonKey);
+      await tester.ensureVisible(templateButton);
+      await tester.pumpAndSettle();
+      await tester.tap(templateButton);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(templatePickerEmptyKey), findsOneWidget);
     });
   });
 }

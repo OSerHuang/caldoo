@@ -11,7 +11,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:caldoo/ai/schemas/meal_analysis.dart';
-import 'package:caldoo/domain/models/models.dart' show Food;
+import 'package:caldoo/domain/models/models.dart' show Food, MealTemplate;
 import 'package:caldoo/features/meals/capture/meal_capture_controller.dart';
 import 'package:image/image.dart' as image;
 
@@ -37,6 +37,24 @@ class RecordingReviewRouter {
   Future<bool?> call(BuildContext context, CaptureSubmission submission) async {
     calls++;
     this.submission = submission;
+    return saved;
+  }
+}
+
+/// Records the template the capture screen routes to review through the
+/// 从模版记录 entry, mirroring [RecordingReviewRouter] for the template lane.
+class RecordingTemplateRouter {
+  RecordingTemplateRouter({this.saved});
+
+  /// The result the fake review screen reports: `true` = the meal was saved.
+  bool? saved;
+
+  MealTemplate? template;
+  int calls = 0;
+
+  Future<bool?> call(BuildContext context, MealTemplate template) async {
+    calls++;
+    this.template = template;
     return saved;
   }
 }
