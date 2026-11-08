@@ -4,6 +4,12 @@
 /// 从模版记录 entry that fills the review form straight from a saved meal
 /// template (no AI call at all).
 ///
+/// The target day is announced at the top of the form: today's page records
+/// "now" behind a quiet 记录到：今天 row, while an entry opened from a
+/// past-day page gets a prominent backfill banner with a one-tap 改为今天
+/// correction — the date is decided before any photo or text is entered, so
+/// the indicator must be visible before the user starts, not only on review.
+///
 /// Layout follows the settings screen conventions (Material 3 defaults, a
 /// 16 px page padding, `Key`s on every interactive widget so widget tests do
 /// not depend on copy). The screen is a plain widget: it renders with no
@@ -11,17 +17,20 @@
 /// so manual entry and navigation always work offline.
 library;
 
+import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:caldoo/core/providers/app_providers.dart'
     show isOfflineProvider;
+import 'package:caldoo/core/time/date_windows.dart' show localDateOfKey;
 import 'package:caldoo/core/ui/shell_insets.dart';
 import 'package:caldoo/domain/models/models.dart';
 import 'package:caldoo/features/meals/templates/template_apply.dart'
     show templateReviewRouterProvider;
 import 'package:caldoo/features/meals/templates/template_picker_screen.dart';
 import 'package:caldoo/features/offline/offline_ui.dart';
+import 'package:caldoo/l10n/app_format.dart';
 import 'package:caldoo/l10n/app_strings.dart';
 
 import 'image_codec.dart';
@@ -45,9 +54,22 @@ const Key captureVoiceHintKey = Key('capture_voice_hint');
 /// Key of the 从模版记录 entry.
 const Key captureTemplateButtonKey = Key('capture_template_button');
 
+/// Key of the target-day indicator (the quiet today row or the backfill
+/// banner).
+const Key captureTargetDayKey = Key('capture_target_day');
+
+/// Key of the backfill banner's 改为今天 action.
+const Key captureChangeToTodayKey = Key('capture_change_to_today');
+
 /// Capture photos and/or free text for one meal.
 class MealCaptureScreen extends ConsumerStatefulWidget {
-  const MealCaptureScreen({super.key});
+  const MealCaptureScreen({super.key, this.targetDay});
+
+  /// The day this capture backfills (a date-only day key, the `dayKeyOf`
+  /// shape) — the browsed day when the entry came from a past-day page — or
+  /// `null` to record "now". Shown on the form and handed back to the review
+  /// route through the submission; the banner's 改为今天 action clears it.
+  final DateTime? targetDay;
 
   @override
   ConsumerState<MealCaptureScreen> createState() => _MealCaptureScreenState();
@@ -64,10 +86,13 @@ class _MealCaptureScreenState extends ConsumerState<MealCaptureScreen> {
     // so photos left by an abandoned capture would be shown again when the
     // user re-opens 拍餐. Riverpod forbids modifying a provider while the tree
     // is building, so the reset is deferred by one microtask (it runs before
-    // the user can interact).
+    // the user can interact). beginCapture also re-seeds the route's backfill
+    // target: every entry re-decides the target day.
     Future<void>.microtask(() {
       if (mounted) {
-        ref.read(captureControllerProvider.notifier).reset();
+        ref
+            .read(captureControllerProvider.notifier)
+            .beginCapture(widget.targetDay);
       }
     });
   }
@@ -77,6 +102,75 @@ class _MealCaptureScreenState extends ConsumerState<MealCaptureScreen> {
     _textFocus.dispose();
     _text.dispose();
     super.dispose();
+  }
+
+  /// The target-day indicator at the top of the form.
+  ///
+  /// A "now" capture stays quiet (记录到：今天 in the secondary text style);
+  /// a backfill entry — the meal will NOT land in today — gets a prominent
+  /// banner naming the target day plus a one-tap 改为今天 correction that
+  /// keeps the already-entered photos and text.
+  Widget _targetDayIndicator(BuildContext context, DateTime? targetDay) {
+    final ThemeData theme = Theme.of(context);
+    if (targetDay == null) {
+      return Row(
+        key: captureTargetDayKey,
+        children: <Widget>[
+          Icon(
+            Icons.event_available_outlined,
+            size: 15,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            S.of(context).captureTargetToday,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      );
+    }
+    return Material(
+      key: captureTargetDayKey,
+      color: theme.colorScheme.secondaryContainer,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
+        child: Row(
+          children: <Widget>[
+            Icon(
+              Icons.history,
+              size: 17,
+              color: theme.colorScheme.onSecondaryContainer,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                S
+                    .of(context)
+                    .captureBackfillNotice(
+                      AppFormat.dateWithWeekday(
+                        localDateOfKey(targetDay),
+                        currentYear: clock.now().year,
+                      ),
+                    ),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSecondaryContainer,
+                ),
+              ),
+            ),
+            TextButton(
+              key: captureChangeToTodayKey,
+              onPressed: () => ref
+                  .read(captureControllerProvider.notifier)
+                  .recordIntoToday(),
+              child: Text(S.of(context).captureChangeToToday),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   /// Hands voice input to the keyboard's own microphone.
@@ -148,6 +242,8 @@ class _MealCaptureScreenState extends ConsumerState<MealCaptureScreen> {
       body: ListView(
         padding: withShellBottom(context, const EdgeInsets.all(16)),
         children: <Widget>[
+          _targetDayIndicator(context, state.targetDay),
+          const SizedBox(height: 12),
           TextField(
             key: const Key('capture_text_field'),
             controller: _text,

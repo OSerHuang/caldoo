@@ -7,7 +7,10 @@
 /// * the 1..3 photo cap and undecodable input are rejected;
 /// * a valid submit builds the task-14/16 request and routes the parsed draft
 ///   to review (default placeholder route, or a recorded fake router);
-/// * offline disables the AI submit (G7) while the screen stays reachable.
+/// * offline disables the AI submit (G7) while the screen stays reachable;
+/// * the target-day row announces 记录到：今天 on the today path and a
+///   backfill entry gets the prominent banner whose 改为今天 action re-targets
+///   the meal into today (the target travels with the submission).
 ///
 /// No test opens a socket: the AI call is served by the settings `MockAdapter`.
 library;
@@ -73,6 +76,7 @@ Future<ProviderContainer> _pumpCapture(
   MealPhotoSource? gallerySource,
   RecordingReviewRouter? router,
   FoodRepository? foodRepository,
+  DateTime? targetDay,
   List<Override> extraOverrides = const <Override>[],
 }) async {
   await tester.pumpWidget(
@@ -93,7 +97,7 @@ Future<ProviderContainer> _pumpCapture(
         if (router != null) reviewRouterProvider.overrideWithValue(router.call),
         ...extraOverrides,
       ],
-      child: const MaterialApp(home: MealCaptureScreen()),
+      child: MaterialApp(home: MealCaptureScreen(targetDay: targetDay)),
     ),
   );
   await tester.pumpAndSettle();
@@ -584,6 +588,115 @@ void main() {
       expect(mock.adapter.calls, 0);
     },
   );
+
+  group('target-day indicator', () {
+    /// A date-only day key in the `dayKeyOf` shape (2026-01-03, a Saturday).
+    final DateTime backfillDay = DateTime.utc(2026, 1, 3);
+
+    testWidgets('the today path shows the quiet 记录到：今天 row', (tester) async {
+      await _pumpCapture(tester, db: db, keyStore: keyStore);
+
+      expect(find.byKey(captureTargetDayKey), findsOneWidget);
+      expect(find.text(S.instance.captureTargetToday), findsOneWidget);
+      // Nothing to correct on the today path.
+      expect(find.byKey(captureChangeToTodayKey), findsNothing);
+    });
+
+    testWidgets('a backfill entry shows the target day and 改为今天', (
+      tester,
+    ) async {
+      await _pumpCapture(
+        tester,
+        db: db,
+        keyStore: keyStore,
+        targetDay: backfillDay,
+      );
+
+      expect(find.byKey(captureTargetDayKey), findsOneWidget);
+      // 概览 date rule: a same-year date drops its year, and the weekday
+      // comes from the date itself — so `1月3日` matches whatever year the
+      // wall clock of this test run is in.
+      expect(find.textContaining('1月3日'), findsOneWidget);
+      expect(find.text(S.instance.captureChangeToToday), findsOneWidget);
+    });
+
+    testWidgets('改为今天 clears the target and keeps the typed text', (
+      tester,
+    ) async {
+      final ProviderContainer container = await _pumpCapture(
+        tester,
+        db: db,
+        keyStore: keyStore,
+        targetDay: backfillDay,
+      );
+      await tester.enterText(find.byKey(const Key('capture_text_field')), '午饭');
+      await tester.pump();
+
+      await tester.tap(find.byKey(captureChangeToTodayKey));
+      await tester.pump();
+
+      expect(container.read(captureControllerProvider).targetDay, isNull);
+      // The banner collapsed back into the quiet today row…
+      expect(find.text(S.instance.captureTargetToday), findsOneWidget);
+      expect(find.textContaining('1月3日'), findsNothing);
+      // …without throwing away what the user already entered.
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const Key('capture_text_field')))
+            .controller!
+            .text,
+        '午饭',
+      );
+    });
+
+    testWidgets('the backfill target travels with the submission', (
+      tester,
+    ) async {
+      final RecordingReviewRouter router = RecordingReviewRouter();
+      final mock = mockDio((options) => mealCompletion(mealArguments));
+      await keyStore.write(testApiKey);
+      await _pumpCapture(
+        tester,
+        db: db,
+        keyStore: keyStore,
+        dio: mock.dio,
+        router: router,
+        targetDay: backfillDay,
+      );
+
+      await tester.enterText(find.byKey(const Key('capture_text_field')), '午饭');
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('capture_submit_button')));
+      await tester.pumpAndSettle();
+
+      expect(router.calls, 1);
+      expect(router.submission!.targetDay, backfillDay);
+    });
+
+    testWidgets('改为今天 before submit submits a null target', (tester) async {
+      final RecordingReviewRouter router = RecordingReviewRouter();
+      final mock = mockDio((options) => mealCompletion(mealArguments));
+      await keyStore.write(testApiKey);
+      await _pumpCapture(
+        tester,
+        db: db,
+        keyStore: keyStore,
+        dio: mock.dio,
+        router: router,
+        targetDay: backfillDay,
+      );
+
+      await tester.tap(find.byKey(captureChangeToTodayKey));
+      await tester.pump();
+      await tester.enterText(find.byKey(const Key('capture_text_field')), '午饭');
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('capture_submit_button')));
+      await tester.pumpAndSettle();
+
+      expect(router.calls, 1);
+      expect(router.submission!.targetDay, isNull);
+    });
+  });
 
   group('no saved-food catalogue in the analysis request', () {
     /// The user message of the single captured request, as a plain string.
