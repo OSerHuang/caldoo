@@ -41,6 +41,33 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      # The sqlite3 hook fetches its prebuilt linux library anonymously, and
+      # that fetch intermittently returns a GitHub error page instead of the
+      # asset (observed 2026-11-08 as the same wrong sha256 across two runs
+      # while the release asset itself was intact). The hook reuses an already
+      # cached file when its sha256 matches, so pre-seed the cache here with an
+      # authenticated download; a wrong seed is harmless because the hook
+      # re-validates and falls back to its own fetch. The tag and hash are
+      # parsed from the installed sqlite3 package, so a future bump re-seeds
+      # itself without touching this file.
+      - name: Pre-seed sqlite3 native asset cache
+        run: |
+          set -euo pipefail
+          pkg_dir="$(ls -d "$HOME/.pub-cache/hosted/pub.dev"/sqlite3-*/ | sort -V | tail -1)"
+          hashes="$pkg_dir/lib/src/hook/asset_hashes.dart"
+          tag="$(grep -oP "releaseTag = '\K[^']+" "$hashes")"
+          filename='libsqlite3.x64.linux.so'
+          hash="$(grep -oP "'\Q$filename\E': '\K[a-f0-9]{64}" "$hashes")"
+          dir=".dart_tool/hooks_runner/shared/sqlite3/build/download-${hash:0:8}"
+          mkdir -p "$dir"
+          for attempt in 1 2 3 4 5; do
+            gh release download "$tag" --repo simolus3/sqlite3.dart \
+              --pattern "$filename" --output "$dir/libsqlite3.so" && break
+            echo "sqlite3 asset download attempt $attempt failed; retrying"
+            sleep 10
+          done
+          echo "$hash  $dir/libsqlite3.so" | sha256sum -c -
+
       # All .g.dart files (drift / riverpod / json_serializable) are committed,
       # so a stale checkout is a real bug — catch it here.
       - name: Verify generated code is up to date
