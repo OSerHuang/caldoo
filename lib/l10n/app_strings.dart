@@ -617,6 +617,16 @@ class S {
   /// Meal-capture app bar title.
   String get captureMealTitle => '记录一餐';
 
+  /// The quiet target-day row on the today path.
+  String get captureTargetToday => '记录到：今天';
+
+  /// The backfill banner naming the day this meal will land in:
+  /// `这一餐将记入 11月6日 周五`.
+  String captureBackfillNotice(String date) => '这一餐将记入 $date';
+
+  /// The backfill banner's one-tap correction: record into today instead.
+  String get captureChangeToToday => '改为今天';
+
   /// Description field label.
   String get labelDescription => '文字描述（可选）';
 

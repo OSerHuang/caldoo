@@ -19,6 +19,7 @@
 /// than private widget types, so they pin the values the user sees.
 library;
 
+import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -27,11 +28,14 @@ import 'package:caldoo/domain/models/models.dart';
 import 'package:caldoo/features/dashboard/daily/daily_summary_view.dart';
 import 'package:caldoo/features/meals/capture/meal_capture_screen.dart';
 import 'package:caldoo/features/meals/review/meal_review_screen.dart';
+import 'package:caldoo/features/meals/summary/day_window.dart'
+    show localDayWindow;
 import 'package:caldoo/features/nav/today_screen.dart';
 
 import '../../data/db/_test_db.dart';
 import '../../data/repositories/fake_repositories.dart';
-import '../dashboard/daily/_fixtures.dart' show dashboardNow;
+import '../dashboard/daily/_fixtures.dart'
+    show dashboardClock, dashboardNow, dashboardOffset;
 import '../meals/capture/_fakes.dart' show mealArguments, mealCompletion;
 import '../settings/_fakes.dart';
 import '_harness.dart';
@@ -390,6 +394,88 @@ void main() {
       expect(find.text('米饭'), findsOneWidget);
     },
   );
+
+  testWidgets('改为今天 on the capture screen re-targets the backfill into today', (
+    WidgetTester tester,
+  ) async {
+    // The re-targeted meal records "now" through the capture route's
+    // package:clock seam, which the harness's Riverpod clock providers do
+    // NOT pin — wrap the whole flow in withClock so "now" is the harness's
+    // 2026-01-05 12:00 +08:00 everywhere in this test.
+    await withClock(dashboardClock(), () async {
+      usePhoneSurface(tester);
+      await seedTwoDays(env.meals);
+      final mock = mockDio((options) => mealCompletion(mealArguments));
+      final InMemorySecureKeyStore keyStore = InMemorySecureKeyStore();
+      await keyStore.write(testApiKey);
+      await env.pump(
+        tester,
+        dio: mock.dio,
+        keyStore: keyStore,
+        database: testDb(),
+      );
+
+      // The exact inverse of the backfill test above: capture opened on
+      // yesterday's page, but the meal must land in TODAY's window.
+      final today = localDayWindow(dashboardNow, dashboardOffset);
+      final int todayBefore = (await env.meals.getMealsInRange(
+        startInclusive: today.start,
+        endExclusive: today.end,
+      )).length;
+      final yesterday = localDayWindow(
+        dashboardNow.subtract(const Duration(days: 1)),
+        dashboardOffset,
+      );
+      final int yesterdayBefore = (await env.meals.getMealsInRange(
+        startInclusive: yesterday.start,
+        endExclusive: yesterday.end,
+      )).length;
+
+      await tester.drag(
+        find.byKey(historyPagerKey('today')),
+        const Offset(600, 0),
+      );
+      await tester.pumpAndSettle();
+      await scrollTodayUntilVisible(tester, find.byKey(todayQuickAddMealKey));
+      await tester.tap(find.byKey(todayQuickAddMealKey));
+      await tester.pumpAndSettle();
+
+      // The capture screen announces the backfill target (1月4日 周日) —
+      // the exact mistake this screen is now designed to surface…
+      expect(find.textContaining('1月4日'), findsOneWidget);
+      // …and one tap re-targets the meal into today.
+      await tester.tap(find.byKey(captureChangeToTodayKey));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('1月4日'), findsNothing);
+
+      await tester.enterText(
+        find.byKey(const Key('capture_text_field')),
+        '其实是今天吃的',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('capture_submit_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(MealReviewScreen), findsOneWidget);
+      await tester.ensureVisible(find.byKey(reviewSaveButtonKey));
+      await tester.pump();
+      await tester.tap(find.byKey(reviewSaveButtonKey));
+      await tester.pumpAndSettle();
+
+      // The meal recorded "now" of the pinned clock (today, 12:00 +08:00):
+      // it lands in today's window, and yesterday's log stays untouched.
+      final List<Meal> todayAfter = await env.meals.getMealsInRange(
+        startInclusive: today.start,
+        endExclusive: today.end,
+      );
+      expect(todayAfter, hasLength(todayBefore + 1));
+      final List<Meal> yesterdayAfter = await env.meals.getMealsInRange(
+        startInclusive: yesterday.start,
+        endExclusive: yesterday.end,
+      );
+      expect(yesterdayAfter, hasLength(yesterdayBefore));
+    });
+  });
 }
 
 /// Scrolls the 今日 day view back towards the top (the totals card), the

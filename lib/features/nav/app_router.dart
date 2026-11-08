@@ -216,6 +216,9 @@ StatefulShellRoute _shellRoute() {
 /// The route takes an optional backfill target: a past-day page's quick-add
 /// pushes the browsed day (a date-only day key, the `dayKeyOf` shape) as
 /// `extra`. Without it — today's page — the meal records "now" as before.
+/// The screen shows the target on its form and hands it back through the
+/// [CaptureSubmission], so the banner's 改为今天 tap re-targets the meal
+/// into today.
 GoRoute _captureRoute() {
   return GoRoute(
     path: 'capture',
@@ -228,6 +231,11 @@ GoRoute _captureRoute() {
             BuildContext captureContext,
             CaptureSubmission submission,
           ) {
+            // The backfill target comes from the SUBMISSION, not the route's
+            // extra: the screen seeds it on entry and the banner's 改为今天
+            // tap can clear it before the submit, so the decision must use
+            // the state at submit time.
+            final DateTime? backfillDay = submission.targetDay;
             final DateTime now = clock.now();
             final LocalOffset offset = ProviderScope.containerOf(captureContext)
                 .read(localOffsetProvider);
@@ -240,14 +248,14 @@ GoRoute _captureRoute() {
             // the review screen's type selector corrects it.
             final DateTime timestamp;
             final MealType mealType;
-            if (targetDay == null) {
+            if (backfillDay == null) {
               timestamp = now;
               mealType = mealTypeForHour(now.hour);
             } else {
               timestamp = DateTime.utc(
-                targetDay.year,
-                targetDay.month,
-                targetDay.day,
+                backfillDay.year,
+                backfillDay.month,
+                backfillDay.day,
               ).subtract(offset.duration).add(const Duration(hours: 12));
               mealType = MealType.lunch;
             }
@@ -266,7 +274,7 @@ GoRoute _captureRoute() {
             );
           }),
         ],
-        child: const MealCaptureScreen(),
+        child: MealCaptureScreen(targetDay: targetDay),
       );
     },
   );

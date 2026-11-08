@@ -4849,18 +4849,19 @@ class $$MealsTableTableManager
               getPrefetchedDataCallback: (items) async {
                 return [
                   if (mealItemsRefs)
-                    await $_getPrefetchedData<
+                    await $_getPrefetchedDataByColumns<
                       MealRow,
                       $MealsTable,
-                      MealItemRow
+                      MealItemRow,
+                      $MealItemsTable
                     >(
                       currentTable: table,
                       referencedTable: $$MealsTableReferences
                           ._mealItemsRefsTable(db),
                       managerFromTypedResult: (p0) =>
                           $$MealsTableReferences(db, table, p0).mealItemsRefs,
-                      referencedItemsForCurrentItem: (item, referencedItems) =>
-                          referencedItems.where((e) => e.mealId == item.id),
+                      currentColumn: 'id',
+                      referencedColumn: 'meal_id',
                       typedResults: items,
                     ),
                 ];

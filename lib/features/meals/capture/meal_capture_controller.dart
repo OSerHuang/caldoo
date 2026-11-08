@@ -86,6 +86,7 @@ class CaptureSubmission {
     required this.draft,
     required this.photos,
     required this.userText,
+    this.targetDay,
   });
 
   /// The validated AI result to review.
@@ -97,6 +98,14 @@ class CaptureSubmission {
 
   /// The trimmed text the user typed, or an empty string.
   final String userText;
+
+  /// The backfill day this capture was opened for (a date-only day key, the
+  /// `dayKeyOf` shape), or `null` to record "now".
+  ///
+  /// Like the photos and the text, it travels with the draft instead of being
+  /// read back from the controller later: the route's timestamp decision uses
+  /// the state at submit time, including a 改为今天 tap made after entry.
+  final DateTime? targetDay;
 }
 
 /// Outcome of one submit attempt, surfaced by the screen.
@@ -109,6 +118,7 @@ class CaptureState {
     this.submitting = false,
     this.outcome = CaptureOutcome.idle,
     this.error,
+    this.targetDay,
   });
 
   /// Already-downscaled photos, in pick order.
@@ -126,6 +136,13 @@ class CaptureState {
   /// [copyWith]'s `clearError` so a success/retry never leaves a stale banner.
   final AiError? error;
 
+  /// The day this capture backfills (a date-only day key, the `dayKeyOf`
+  /// shape), or `null` to record "now".
+  ///
+  /// Seeded by [CaptureController.beginCapture] from the route's `extra` on
+  /// entry; the screen's 改为今天 action clears it without touching photos.
+  final DateTime? targetDay;
+
   /// Number of photos currently selected.
   int get photoCount => photos.length;
 
@@ -138,11 +155,14 @@ class CaptureState {
     CaptureOutcome? outcome,
     AiError? error,
     bool clearError = false,
+    DateTime? targetDay,
+    bool clearTargetDay = false,
   }) => CaptureState(
     photos: photos ?? this.photos,
     submitting: submitting ?? this.submitting,
     outcome: outcome ?? this.outcome,
     error: clearError ? null : (error ?? this.error),
+    targetDay: clearTargetDay ? null : (targetDay ?? this.targetDay),
   );
 }
 
@@ -151,13 +171,27 @@ class CaptureController extends Notifier<CaptureState> {
   @override
   CaptureState build() => const CaptureState();
 
-  /// Clears the flow back to an empty capture (no photos, no error, idle).
+  /// Clears the flow back to an empty capture and seeds the backfill target.
   ///
   /// The provider is intentionally **not** `autoDispose` (an async submit may
   /// still be running when the screen goes away), so its state outlives the
-  /// screen. The screen calls this after a completed record and on re-entry,
-  /// so a finished or abandoned capture cannot resurface its photos later.
-  void reset() => state = const CaptureState();
+  /// screen. The screen calls this on entry, so a finished or abandoned
+  /// capture cannot resurface its photos later — and every entry re-decides
+  /// the target day from the route's `extra` (`null` = record "now").
+  void beginCapture(DateTime? targetDay) =>
+      state = CaptureState(targetDay: targetDay);
+
+  /// Clears the flow back to an empty capture after a completed record.
+  ///
+  /// The capture inputs are gone, but the backfill target survives: the user
+  /// is still recording from the day page they entered from, so the next
+  /// capture backfills the same day until they leave the flow (or tap
+  /// 改为今天). Re-entry re-seeds the target through [beginCapture].
+  void reset() => state = CaptureState(targetDay: state.targetDay);
+
+  /// The screen's 改为今天 action: record into today instead of the backfill
+  /// day. Photos and text survive; only the target changes.
+  void recordIntoToday() => state = state.copyWith(clearTargetDay: true);
 
   MealPhotoSource _sourceFor(PhotoLane lane) => ref.read(
     lane == PhotoLane.camera
@@ -291,7 +325,12 @@ class CaptureController extends Notifier<CaptureState> {
         outcome: CaptureOutcome.submitted,
         submitting: false,
       );
-      return CaptureSubmission(draft: draft, photos: photos, userText: trimmed);
+      return CaptureSubmission(
+        draft: draft,
+        photos: photos,
+        userText: trimmed,
+        targetDay: state.targetDay,
+      );
     } on AiError catch (error) {
       mealTrace('capture.error', '${error.runtimeType}: ${error.detail}');
       state = state.copyWith(
