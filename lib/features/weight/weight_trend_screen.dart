@@ -7,6 +7,8 @@
 /// here updates the dashboard the moment the user navigates back.
 library;
 
+import 'dart:math' as math;
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -20,6 +22,7 @@ import 'package:caldoo/features/dashboard/daily/daily_summary_providers.dart'
 import 'package:caldoo/l10n/app_format.dart';
 import 'package:caldoo/l10n/app_strings.dart';
 
+import 'weight_chart_window.dart';
 import 'weight_entry_sheet.dart';
 import 'weight_providers.dart';
 
@@ -250,6 +253,10 @@ class _Stat extends StatelessWidget {
   }
 }
 
+/// The bottom axis's reserved band inside the trend chart's 200 px box: the
+/// `N月` labels and their gap.
+const double _bottomAxisHeight = 22;
+
 /// The window's line chart: x is the calendar window, y the recorded weight.
 class _TrendChart extends StatelessWidget {
   const _TrendChart({
@@ -278,105 +285,121 @@ class _TrendChart extends StatelessWidget {
     final DateTime windowStart = entries.first.dayKey;
     final DateTime windowEnd = entries.last.dayKey;
     final double maxX = windowEnd.difference(windowStart).inDays.toDouble();
-    final double minY = entries
+    final double minKg = entries
         .map((WeightEntry e) => e.weightKg)
         .reduce((double a, double b) => a < b ? a : b);
-    final double maxY = entries
+    final double maxKg = entries
         .map((WeightEntry e) => e.weightKg)
         .reduce((double a, double b) => a > b ? a : b);
-    final double pad = ((maxY - minY) * 0.25).clamp(0.2, 1.5);
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        // The tick step is chosen in PIXELS (axis labels are a fixed size), so
+        // the box height decides how many labels fit. The bottom axis takes its
+        // own slice of the box.
+        final ({double minY, double maxY, double interval}) y =
+            weightChartWindow(
+              minKg,
+              maxKg,
+              plotHeightPx: math.max(
+                0,
+                constraints.maxHeight - _bottomAxisHeight,
+              ),
+            );
 
-    return LineChart(
-      LineChartData(
-        minX: 0,
-        maxX: maxX == 0 ? 1 : maxX,
-        minY: minY - pad,
-        maxY: maxY + pad,
-        lineTouchData: LineTouchData(
-          touchTooltipData: LineTouchTooltipData(
-            getTooltipItems: (List<LineBarSpot> spots) => <LineTooltipItem?>[
-              for (final LineBarSpot spot in spots)
-                LineTooltipItem(
-                  '${AppFormat.number(entries[spot.spotIndex].weightKg)} kg\n'
-                  '${AppFormat.date(windowStart.add(Duration(days: spot.x.round())))}',
-                  const TextStyle(),
-                ),
-            ],
-          ),
-        ),
-        gridData: FlGridData(
-          show: true,
-          drawVerticalLine: false,
-          horizontalInterval: _interval(minY, maxY),
-          getDrawingHorizontalLine: (double value) =>
-              FlLine(color: gridColor, strokeWidth: 1),
-        ),
-        titlesData: FlTitlesData(
-          topTitles: const AxisTitles(),
-          leftTitles: const AxisTitles(),
-          rightTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 38,
-              interval: _interval(minY, maxY),
-              getTitlesWidget: (double value, TitleMeta meta) =>
-                  SideTitleWidget(
-                    meta: meta,
-                    child: Text(
-                      AppFormat.number(value),
-                      style: TextStyle(color: labelColor, fontSize: 10),
+        return LineChart(
+          LineChartData(
+            minX: 0,
+            maxX: maxX == 0 ? 1 : maxX,
+            minY: y.minY,
+            maxY: y.maxY,
+            lineTouchData: LineTouchData(
+              touchTooltipData: LineTouchTooltipData(
+                getTooltipItems: (List<LineBarSpot> spots) => <LineTooltipItem?>[
+                  for (final LineBarSpot spot in spots)
+                    LineTooltipItem(
+                      '${AppFormat.number(entries[spot.spotIndex].weightKg)} kg\n'
+                      '${AppFormat.date(windowStart.add(Duration(days: spot.x.round())))}',
+                      const TextStyle(),
                     ),
-                  ),
+                ],
+              ),
             ),
-          ),
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 22,
-              interval: maxX <= 0 ? 1 : (maxX / 3).clamp(1, double.infinity),
-              getTitlesWidget: (double value, TitleMeta meta) {
-                final DateTime day = windowStart.add(
-                  Duration(days: value.round()),
-                );
-                return SideTitleWidget(
-                  meta: meta,
-                  child: Text(
-                    '${day.month}月',
-                    style: TextStyle(color: labelColor, fontSize: 10),
-                  ),
-                );
-              },
-            ),
-          ),
-        ),
-        borderData: FlBorderData(show: false),
-        lineBarsData: <LineChartBarData>[
-          LineChartBarData(
-            spots: <FlSpot>[
-              for (final WeightEntry entry in entries)
-                FlSpot(
-                  entry.dayKey.difference(windowStart).inDays.toDouble(),
-                  entry.weightKg,
-                ),
-            ],
-            isCurved: false,
-            barWidth: 2.2,
-            color: lineColor,
-            dotData: const FlDotData(show: false),
-            belowBarData: BarAreaData(
+            gridData: FlGridData(
               show: true,
-              color: lineColor.withValues(alpha: 0.08),
+              drawVerticalLine: false,
+              horizontalInterval: y.interval,
+              getDrawingHorizontalLine: (double value) =>
+                  FlLine(color: gridColor, strokeWidth: 1),
             ),
+            titlesData: FlTitlesData(
+              topTitles: const AxisTitles(),
+              leftTitles: const AxisTitles(),
+              rightTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: 38,
+                  interval: y.interval,
+                  // Only the regular ticks get a label: with both window bounds
+                  // excluded no label can land a fraction of a step off its
+                  // neighbour (see weight_chart_window.dart).
+                  minIncluded: false,
+                  maxIncluded: false,
+                  getTitlesWidget: (double value, TitleMeta meta) =>
+                      SideTitleWidget(
+                        meta: meta,
+                        child: Text(
+                          AppFormat.number(value),
+                          style: TextStyle(color: labelColor, fontSize: 10),
+                        ),
+                      ),
+                ),
+              ),
+              bottomTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: _bottomAxisHeight,
+                  interval: maxX <= 0
+                      ? 1
+                      : (maxX / 3).clamp(1, double.infinity),
+                  getTitlesWidget: (double value, TitleMeta meta) {
+                    final DateTime day = windowStart.add(
+                      Duration(days: value.round()),
+                    );
+                    return SideTitleWidget(
+                      meta: meta,
+                      child: Text(
+                        '${day.month}月',
+                        style: TextStyle(color: labelColor, fontSize: 10),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+            borderData: FlBorderData(show: false),
+            lineBarsData: <LineChartBarData>[
+              LineChartBarData(
+                spots: <FlSpot>[
+                  for (final WeightEntry entry in entries)
+                    FlSpot(
+                      entry.dayKey.difference(windowStart).inDays.toDouble(),
+                      entry.weightKg,
+                    ),
+                ],
+                isCurved: false,
+                barWidth: 2.2,
+                color: lineColor,
+                dotData: const FlDotData(show: false),
+                belowBarData: BarAreaData(
+                  show: true,
+                  color: lineColor.withValues(alpha: 0.08),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
-  }
-
-  /// A "nice" y interval: ~3 grid lines between the padded bounds.
-  static double _interval(double minY, double maxY) {
-    final double span = (maxY - minY).clamp(0.4, double.infinity);
-    return (span / 3).roundToDouble().clamp(0.5, double.infinity);
   }
 }
 

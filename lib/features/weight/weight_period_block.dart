@@ -10,6 +10,8 @@
 /// providers slice them with the same date-only keys as the meals/exercises).
 library;
 
+import 'dart:math' as math;
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -22,6 +24,7 @@ import 'package:caldoo/domain/models/weight_entry.dart';
 import 'package:caldoo/l10n/app_format.dart';
 import 'package:caldoo/l10n/app_strings.dart';
 
+import 'weight_chart_window.dart';
 import 'weight_entry_sheet.dart';
 
 /// The signed-kg text for a delta chip: `−0.6`, `+0.4`, `0` (no sign on zero).
@@ -157,6 +160,10 @@ class WeightPeriodBlock extends ConsumerWidget {
   }
 }
 
+/// The bottom axis's reserved band inside the block's 120 px chart box: the
+/// weekday / day-of-month labels and their gap.
+const double _bottomAxisHeight = 20;
+
 /// The block's line chart: x = the period's day slots, y = kg, own axis.
 class _PeriodWeightChart extends StatelessWidget {
   const _PeriodWeightChart({
@@ -177,87 +184,107 @@ class _PeriodWeightChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double minY = entries
+    final double minKg = entries
         .map((WeightEntry e) => e.weightKg)
         .reduce((double a, double b) => a < b ? a : b);
-    final double maxY = entries
+    final double maxKg = entries
         .map((WeightEntry e) => e.weightKg)
         .reduce((double a, double b) => a > b ? a : b);
-    final double pad = ((maxY - minY) * 0.3).clamp(0.2, 1.2);
-    final double maxX = (slotCount - 1).toDouble();
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        // The tick step is chosen in PIXELS: axis labels are a fixed size, so
+        // how many fit depends on the plot's height, not on the kg range. The
+        // bottom axis takes its own slice of the box.
+        final ({double minY, double maxY, double interval}) y =
+            weightChartWindow(
+              minKg,
+              maxKg,
+              plotHeightPx: math.max(
+                0,
+                constraints.maxHeight - _bottomAxisHeight,
+              ),
+            );
+        final double maxX = (slotCount - 1).toDouble();
 
-    return LineChart(
-      LineChartData(
-        minX: 0,
-        maxX: maxX == 0 ? 1 : maxX,
-        minY: minY - pad,
-        maxY: maxY + pad,
-        lineTouchData: const LineTouchData(enabled: false),
-        gridData: FlGridData(
-          show: true,
-          drawVerticalLine: false,
-          horizontalInterval: (maxY - minY) / 2 == 0 ? 0.5 : (maxY - minY) / 2,
-          getDrawingHorizontalLine: (double value) =>
-              FlLine(color: gridColor, strokeWidth: 1),
-        ),
-        titlesData: FlTitlesData(
-          topTitles: const AxisTitles(),
-          leftTitles: const AxisTitles(),
-          rightTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 34,
-              interval: (maxY - minY) / 2 == 0 ? 0.5 : (maxY - minY) / 2,
-              getTitlesWidget: (double value, TitleMeta meta) =>
-                  SideTitleWidget(
-                    meta: meta,
-                    child: Text(
-                      AppFormat.number(value),
-                      style: TextStyle(color: labelColor, fontSize: 10),
-                    ),
-                  ),
-            ),
-          ),
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 20,
-              getTitlesWidget: (double value, TitleMeta meta) =>
-                  _xLabel(value, meta),
-            ),
-          ),
-        ),
-        borderData: FlBorderData(show: false),
-        lineBarsData: <LineChartBarData>[
-          LineChartBarData(
-            spots: <FlSpot>[
-              for (final WeightEntry entry in entries)
-                FlSpot(
-                  entry.dayKey.difference(periodStart).inDays.toDouble(),
-                  entry.weightKg,
-                ),
-            ],
-            // A single recording draws as its dot only (isCurved over one
-            // spot renders the dot anyway; the line simply has no length).
-            isCurved: false,
-            barWidth: 2.2,
-            color: lineColor,
-            dotData: FlDotData(
+        return LineChart(
+          LineChartData(
+            minX: 0,
+            maxX: maxX == 0 ? 1 : maxX,
+            minY: y.minY,
+            maxY: y.maxY,
+            lineTouchData: const LineTouchData(enabled: false),
+            gridData: FlGridData(
               show: true,
-              getDotPainter: (
-                FlSpot spot,
-                double _,
-                LineChartBarData _,
-                int _,
-              ) => FlDotCirclePainter(radius: 3, color: lineColor),
+              drawVerticalLine: false,
+              horizontalInterval: y.interval,
+              getDrawingHorizontalLine: (double value) =>
+                  FlLine(color: gridColor, strokeWidth: 1),
             ),
-            belowBarData: BarAreaData(
-              show: entries.length > 1,
-              color: lineColor.withValues(alpha: 0.08),
+            titlesData: FlTitlesData(
+              topTitles: const AxisTitles(),
+              leftTitles: const AxisTitles(),
+              rightTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: 34,
+                  interval: y.interval,
+                  // Only the regular ticks get a label: with both window bounds
+                  // excluded no label can land a fraction of a step off its
+                  // neighbour (see weight_chart_window.dart).
+                  minIncluded: false,
+                  maxIncluded: false,
+                  getTitlesWidget: (double value, TitleMeta meta) =>
+                      SideTitleWidget(
+                        meta: meta,
+                        child: Text(
+                          AppFormat.number(value),
+                          style: TextStyle(color: labelColor, fontSize: 10),
+                        ),
+                      ),
+                ),
+              ),
+              bottomTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: _bottomAxisHeight,
+                  getTitlesWidget: (double value, TitleMeta meta) =>
+                      _xLabel(value, meta),
+                ),
+              ),
             ),
+            borderData: FlBorderData(show: false),
+            lineBarsData: <LineChartBarData>[
+              LineChartBarData(
+                spots: <FlSpot>[
+                  for (final WeightEntry entry in entries)
+                    FlSpot(
+                      entry.dayKey.difference(periodStart).inDays.toDouble(),
+                      entry.weightKg,
+                    ),
+                ],
+                // A single recording draws as its dot only (isCurved over one
+                // spot renders the dot anyway; the line simply has no length).
+                isCurved: false,
+                barWidth: 2.2,
+                color: lineColor,
+                dotData: FlDotData(
+                  show: true,
+                  getDotPainter: (
+                    FlSpot spot,
+                    double _,
+                    LineChartBarData _,
+                    int _,
+                  ) => FlDotCirclePainter(radius: 3, color: lineColor),
+                ),
+                belowBarData: BarAreaData(
+                  show: entries.length > 1,
+                  color: lineColor.withValues(alpha: 0.08),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
