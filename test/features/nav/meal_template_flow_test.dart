@@ -16,16 +16,22 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:caldoo/core/time/date_windows.dart' show MealWithItems;
+import 'package:caldoo/core/ui/history_period_pager.dart' show historyPagerKey;
 import 'package:caldoo/domain/models/models.dart';
 import 'package:caldoo/features/meals/capture/meal_capture_screen.dart';
 import 'package:caldoo/features/meals/review/meal_review_screen.dart';
+import 'package:caldoo/features/meals/summary/day_window.dart'
+    show localDayWindow;
 import 'package:caldoo/features/meals/templates/save_template_sheet.dart';
 import 'package:caldoo/features/meals/templates/template_library_screen.dart';
 import 'package:caldoo/features/nav/app_router.dart';
 import 'package:caldoo/features/nav/meal_detail_screen.dart';
 import 'package:caldoo/features/nav/nav_shell.dart';
 import 'package:caldoo/features/nav/profile_tab_screen.dart';
+import 'package:caldoo/features/nav/today_screen.dart'
+    show todayQuickAddMealKey;
 
+import '../dashboard/daily/_fixtures.dart' show dashboardNow, dashboardOffset;
 import '_harness.dart';
 
 void main() {
@@ -293,5 +299,89 @@ void main() {
       // Fresh ids: the template's line ids are never reused.
       expect(meals.single.items.single.id, isNot('ti-1'));
     });
+
+    testWidgets(
+      'a template picked on a past-day page backfills into that day',
+      (tester) async {
+        // The capture route announces the browsed day (记录到：1月4日); the
+        // template lane must honour the SAME target the AI lane does. The
+        // bug this pins: the template meal used to record "now" — into
+        // today — while the banner promised yesterday.
+        await env.templates.saveTemplate(
+          MealTemplate(
+            id: 'tpl-1',
+            name: '早餐标配',
+            createdAt: DateTime(2026, 3, 4, 8),
+            mealType: MealType.breakfast,
+            items: const <MealItem>[
+              MealItem(
+                id: 'ti-1',
+                name: '米饭',
+                grams: 150,
+                kcal: 174,
+                carbG: 38.9,
+                proteinG: 4.2,
+                fatG: 0.6,
+                saltG: 0.01,
+                source: FoodSource.ai,
+              ),
+            ],
+          ),
+        );
+        await env.pump(tester);
+
+        // Onto yesterday's page (the pinned clock's today is 2026-01-05),
+        // then through the real quick-add: the route's extra is the browsed
+        // day, exactly like the AI-lane backfill tests.
+        await tester.drag(
+          find.byKey(historyPagerKey('today')),
+          const Offset(600, 0),
+        );
+        await tester.pumpAndSettle();
+        await scrollTodayUntilVisible(tester, find.byKey(todayQuickAddMealKey));
+        await tester.tap(find.byKey(todayQuickAddMealKey));
+        await tester.pumpAndSettle();
+
+        // The capture screen announces the backfill target (1月4日).
+        expect(find.byKey(captureTargetDayKey), findsOneWidget);
+        expect(find.textContaining('1月4日'), findsOneWidget);
+
+        // The template lane, through the PRODUCTION template router.
+        final Finder templateButton = find.byKey(captureTemplateButtonKey);
+        await tester.ensureVisible(templateButton);
+        await tester.pumpAndSettle();
+        await tester.tap(templateButton);
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('template_pick_tpl-1')));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(MealReviewScreen), findsOneWidget);
+        await tester.ensureVisible(find.byKey(reviewSaveButtonKey));
+        await tester.pump();
+        await tester.tap(find.byKey(reviewSaveButtonKey));
+        await tester.pumpAndSettle();
+
+        // The template meal landed in the BROWSED day's window
+        // (2026-01-04 12:00 +08:00), never in today's.
+        final yesterday = localDayWindow(
+          dashboardNow.subtract(const Duration(days: 1)),
+          dashboardOffset,
+        );
+        final List<MealWithItems> yesterdayMeals = await env.meals
+            .getMealsWithItemsInRange(
+              startInclusive: yesterday.start,
+              endExclusive: yesterday.end,
+            );
+        expect(yesterdayMeals, hasLength(1));
+        expect(yesterdayMeals.single.items.single.name, '米饭');
+        final today = localDayWindow(dashboardNow, dashboardOffset);
+        final List<MealWithItems> todayMeals = await env.meals
+            .getMealsWithItemsInRange(
+              startInclusive: today.start,
+              endExclusive: today.end,
+            );
+        expect(todayMeals, isEmpty);
+      },
+    );
   });
 }

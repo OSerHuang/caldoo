@@ -12,9 +12,10 @@
 ///   within a meal;
 /// * the meal type comes from the template (the source meal's type; the review
 ///   screen's selector can change it);
-/// * the timestamp is the shared capture rule (`captureTimestampFor`) — today
-///   that is always "now"; when the capture flow carries a backfill target
-///   (the target-day change), the same call site picks it up unchanged.
+/// * the timestamp is the shared capture rule (`captureTimestampFor`) — "now"
+///   for today's entry, noon of the target day when the capture flow was
+///   opened from a past-day page, so a template meal lands in the SAME day
+///   the capture screen's banner announces.
 ///
 /// The router is a provider seam like `reviewRouterProvider`: the screen never
 /// routes inline, so widget tests override it with a recorder.
@@ -28,6 +29,8 @@ import 'package:uuid/uuid.dart';
 import 'package:caldoo/core/logging/meal_trace.dart';
 import 'package:caldoo/core/time/date_windows.dart' show LocalOffset;
 import 'package:caldoo/domain/models/models.dart';
+import 'package:caldoo/features/meals/capture/meal_capture_controller.dart'
+    show captureControllerProvider;
 import 'package:caldoo/features/meals/summary/meal_summary_providers.dart'
     show localOffsetProvider;
 import 'package:caldoo/features/nav/review_args.dart'
@@ -70,9 +73,12 @@ final templateReviewRouterProvider = Provider<TemplateReviewRouter>(
 
 Future<bool?> _pushTemplateReview(BuildContext context, MealTemplate template) {
   final ProviderContainer container = ProviderScope.containerOf(context);
-  // The template lane has no backfill target of its own yet (a template meal
-  // records "now"); the shared rule keeps that decision in one place.
-  const DateTime? targetDay = null;
+  // The backfill target travels with the capture state at PICK time (the
+  // banner's 改为今天 included): the same day the capture screen announces is
+  // the day this meal records into — `null` means today's "now".
+  final DateTime? targetDay = container
+      .read(captureControllerProvider)
+      .targetDay;
   final LocalOffset offset = container.read(localOffsetProvider);
   mealTraceJson('capture.template', <String, Object?>{
     'templateName': template.name,
