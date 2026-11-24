@@ -138,7 +138,15 @@ class ExerciseEntryController extends Notifier<ExerciseEntryState> {
       return false;
     }
 
-    state = ExerciseEntryState(day: day, kcal: kcal, saving: true);
+    // `loaded` must survive the in-flight state: the failure path below reads
+    // it back out of `state`, and a dropped `loaded` would leave `ready`
+    // false — the field and both actions dead until the user navigated away.
+    state = ExerciseEntryState(
+      day: day,
+      kcal: kcal,
+      loaded: state.loaded,
+      saving: true,
+    );
     try {
       final DailyExerciseRepository exercises = ref.read(
         exerciseRepositoryProvider,

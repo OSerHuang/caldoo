@@ -309,8 +309,16 @@ class FakeExerciseRepository implements DailyExerciseRepository {
   final Map<DateTime, DailyExercise> _byDay = <DateTime, DailyExercise>{};
   final StreamController<void> _changes = StreamController<void>.broadcast();
 
+  /// When non-null, [setKcal] throws it: the failed-write path a controller
+  /// must survive with its form still editable. Clear it to let writes pass.
+  Object? failSetKcal;
+
   @override
   Future<void> setKcal({required DateTime dayKey, required int kcal}) async {
+    final Object? failure = failSetKcal;
+    if (failure != null) {
+      throw failure;
+    }
     if (kcal <= 0) {
       if (_byDay.remove(dayKey) != null) {
         _changes.add(null);

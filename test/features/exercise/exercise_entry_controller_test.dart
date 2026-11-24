@@ -211,6 +211,32 @@ void main() {
           .first;
       expect(range, hasLength(1));
     });
+
+    test('a failed save keeps the form editable for a retry', () async {
+      // The failed-write path: the value stays in the field, the typed error
+      // shows, and `ready` must survive so the user can retry in place. The
+      // bug this pins: the in-flight state dropped `loaded`, so the failure
+      // read `loaded: false` back and the form locked until re-entry.
+      await open();
+      controller().setKcal(300);
+      repo.failSetKcal = StateError('store rejected the write');
+
+      expect(await controller().save(), isFalse);
+
+      expect(state().day, _todayKey);
+      expect(state().kcal, 300);
+      expect(state().error, '保存失败，请重试');
+      expect(state().saving, isFalse);
+      expect(state().loaded, isTrue, reason: 'the field must stay editable');
+      expect(state().ready, isTrue);
+      expect(await repo.getDay(_todayKey), isNull);
+
+      // The retry, with the failure cleared, succeeds on the same value.
+      repo.failSetKcal = null;
+      expect(await controller().save(), isTrue);
+      expect((await repo.getDay(_todayKey))!.kcal, 300);
+      expect(state().error, isNull);
+    });
   });
 
   group('clear', () {
